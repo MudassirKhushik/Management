@@ -1,0 +1,35 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider  = "postgresql"
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
+}
+
+model Traveler {
+  id          String   @id @default(cuid())
+  name        String
+  peopleCount Int      @default(1)
+  price       Float
+  createdAt   DateTime @default(now())
+}
+
+model Package {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  imageUrl    String?
+  createdAt   DateTime  @default(now())
+  inquiries   Inquiry[]
+}
+
+model Inquiry {
+  id          String   @id @default(cuid())
+  packageId   String
+  package     Package  @relation(fields: [packageId], references: [id])
+  phone       String
+  peopleCount Int      @default(1)
+  createdAt   DateTime @default(now())
+}
