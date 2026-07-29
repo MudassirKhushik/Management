@@ -50,18 +50,24 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   callbacks: {
     async jwt({ token, user }) {
       if (user) {
-        token.isSuperAdmin = user.isSuperAdmin;
-        token.agencyId = user.agencyId;
-        token.agencySlug = user.agencySlug;
-        token.agencyName = user.agencyName;
+
+        const u = user as any;
+
+        token.isSuperAdmin = u.isSuperAdmin;
+        token.agencyId = u.agencyId;
+        token.agencySlug = u.agencySlug;
+        token.agencyName = u.agencyName;
       }
       return token;
     },
     async session({ session, token }) {
-      session.user.isSuperAdmin = token.isSuperAdmin as boolean;
-      session.user.agencyId = token.agencyId as string | null;
-      session.user.agencySlug = token.agencySlug as string | null;
-      session.user.agencyName = token.agencyName as string | null;
+
+      const s = session as any;
+
+      s.user.isSuperAdmin = token.isSuperAdmin as boolean;
+      s.user.agencyId = token.agencyId as string | null;
+      s.user.agencySlug = token.agencySlug as string | null;
+      s.user.agencyName = token.agencyName as string | null;
       return session;
     },
   },
