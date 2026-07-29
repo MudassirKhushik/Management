@@ -2,9 +2,11 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
+import { useSession } from "next-auth/react";
 
 export default function AddPackagePage() {
   const router = useRouter();
+  const { data: session } = useSession();
   const [title, setTitle] = useState("");
   const [description, setDescription] = useState("");
   const [imageUrl, setImageUrl] = useState("");
@@ -21,7 +23,10 @@ export default function AddPackagePage() {
     });
 
     setLoading(false);
-    router.push("/"); // go see it live on the public homepage
+    // Redirect to THIS agency's own public page, read from the session -
+    // never hardcoded, so this works correctly for every agency.
+    const agencySlug = session?.user?.agencySlug;
+    router.push(agencySlug ? `/${agencySlug}` : "/portal");
   }
 
   return (
@@ -30,39 +35,17 @@ export default function AddPackagePage() {
       <form onSubmit={handleSubmit} className="space-y-4">
         <div>
           <label className="block text-sm mb-1">Title</label>
-          <input
-            className="w-full border rounded px-3 py-2"
-            value={title}
-            onChange={(e) => setTitle(e.target.value)}
-            required
-          />
+          <input className="w-full border rounded px-3 py-2" value={title} onChange={(e) => setTitle(e.target.value)} required />
         </div>
         <div>
           <label className="block text-sm mb-1">Description</label>
-          <textarea
-            className="w-full border rounded px-3 py-2"
-            rows={4}
-            value={description}
-            onChange={(e) => setDescription(e.target.value)}
-            required
-          />
+          <textarea className="w-full border rounded px-3 py-2" rows={4} value={description} onChange={(e) => setDescription(e.target.value)} required />
         </div>
         <div>
-          <label className="block text-sm mb-1">
-            Image URL (optional for now)
-          </label>
-          <input
-            className="w-full border rounded px-3 py-2"
-            placeholder="https://..."
-            value={imageUrl}
-            onChange={(e) => setImageUrl(e.target.value)}
-          />
+          <label className="block text-sm mb-1">Image URL (optional for now)</label>
+          <input className="w-full border rounded px-3 py-2" placeholder="https://..." value={imageUrl} onChange={(e) => setImageUrl(e.target.value)} />
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded"
-        >
+        <button type="submit" disabled={loading} className="bg-black text-white px-4 py-2 rounded">
           {loading ? "Saving..." : "Save Package"}
         </button>
       </form>

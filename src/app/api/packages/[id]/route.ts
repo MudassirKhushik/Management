@@ -1,7 +1,7 @@
 import { prisma } from "@/lib/prisma";
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../auth";
- 
+
 export async function GET(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -11,16 +11,14 @@ export async function GET(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
- 
-  const traveler = await prisma.traveler.findUnique({ where: { id } });
-  // Not just "does it exist" - does it belong to THIS agency?
-  if (!traveler || traveler.agencyId !== session.user.agencyId) {
+
+  const pkg = await prisma.package.findUnique({ where: { id } });
+  if (!pkg || pkg.agencyId !== session.user.agencyId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
- 
-  return NextResponse.json(traveler);
+  return NextResponse.json(pkg);
 }
- 
+
 export async function PUT(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -30,24 +28,24 @@ export async function PUT(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
- 
-  const existing = await prisma.traveler.findUnique({ where: { id } });
+
+  const existing = await prisma.package.findUnique({ where: { id } });
   if (!existing || existing.agencyId !== session.user.agencyId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
- 
+
   const body = await req.json();
-  const updated = await prisma.traveler.update({
+  const updated = await prisma.package.update({
     where: { id },
     data: {
-      name: body.name,
-      peopleCount: Number(body.peopleCount),
-      price: Number(body.price),
+      title: body.title,
+      description: body.description,
+      imageUrl: body.imageUrl || null,
     },
   });
   return NextResponse.json(updated);
 }
- 
+
 export async function DELETE(
   req: Request,
   { params }: { params: Promise<{ id: string }> }
@@ -57,12 +55,12 @@ export async function DELETE(
     return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
   }
   const { id } = await params;
- 
-  const existing = await prisma.traveler.findUnique({ where: { id } });
+
+  const existing = await prisma.package.findUnique({ where: { id } });
   if (!existing || existing.agencyId !== session.user.agencyId) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
- 
-  await prisma.traveler.delete({ where: { id } });
+
+  await prisma.package.delete({ where: { id } });
   return NextResponse.json({ success: true });
 }

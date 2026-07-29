@@ -1,32 +1,33 @@
 "use client";
-
+ 
 import { useState } from "react";
 import { useParams, useRouter } from "next/navigation";
-
+ 
 export default function BookPackagePage() {
   const params = useParams();
   const router = useRouter();
+  const agencySlug = params.agencySlug as string;
   const packageId = params.packageId as string;
-
+ 
   const [phone, setPhone] = useState("");
   const [peopleCount, setPeopleCount] = useState(1);
   const [loading, setLoading] = useState(false);
   const [submitted, setSubmitted] = useState(false);
-
+ 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setLoading(true);
-
+ 
     await fetch("/api/inquiries", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ packageId, phone, peopleCount }),
     });
-
+ 
     setLoading(false);
     setSubmitted(true);
   }
-
+ 
   if (submitted) {
     return (
       <main className="max-w-md mx-auto p-6 text-center">
@@ -34,16 +35,13 @@ export default function BookPackagePage() {
         <p className="text-gray-600 mb-4">
           Your interest has been sent. Our team will contact you shortly.
         </p>
-        <button
-          onClick={() => router.push("/")}
-          className="text-blue-600 hover:underline"
-        >
+        <button onClick={() => router.push(`/${agencySlug}`)} className="text-blue-600 hover:underline">
           Back to homepage
         </button>
       </main>
     );
   }
-
+ 
   return (
     <main className="max-w-md mx-auto p-6">
       <h1 className="text-xl font-semibold mb-4">Book This Package</h1>
@@ -69,11 +67,7 @@ export default function BookPackagePage() {
             required
           />
         </div>
-        <button
-          type="submit"
-          disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded"
-        >
+        <button type="submit" disabled={loading} className="bg-black text-white px-4 py-2 rounded">
           {loading ? "Sending..." : "Submit"}
         </button>
       </form>

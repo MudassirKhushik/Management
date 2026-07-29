@@ -8,8 +8,43 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+// ------------------------------------------------------------
+// AGENCY = one tenant. Every agency gets a unique `slug`, which
+// is what shows up in the public URL, e.g. yoursite.com/travelcraft
+// ------------------------------------------------------------
+model Agency {
+  id        String   @id @default(cuid())
+  slug      String   @unique   // "travelcraft" - used in the public URL and login
+  name      String              // "Travel Craft Tours" - display name
+  isActive  Boolean  @default(true) // your on/off switch for non-paying agencies
+  createdAt DateTime @default(now())
+
+  users     User[]
+  travelers Traveler[]
+  packages  Package[]
+  inquiries Inquiry[]
+}
+
+// ------------------------------------------------------------
+// USER = one login. Two kinds:
+// - Super Admin: isSuperAdmin = true, agencyId = null (you)
+// - Agency login: isSuperAdmin = false, agencyId = set (one shared
+//   login per agency - no separate owner/staff roles, as you wanted)
+// ------------------------------------------------------------
+model User {
+  id            String   @id @default(cuid())
+  email         String   @unique
+  passwordHash  String
+  isSuperAdmin  Boolean  @default(false)
+  agencyId      String?
+  agency        Agency?  @relation(fields: [agencyId], references: [id])
+  createdAt     DateTime @default(now())
+}
+
 model Traveler {
   id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
   name        String
   peopleCount Int      @default(1)
   price       Float
@@ -18,6 +53,8 @@ model Traveler {
 
 model Package {
   id          String    @id @default(cuid())
+  agencyId    String
+  agency      Agency    @relation(fields: [agencyId], references: [id])
   title       String
   description String
   imageUrl    String?
@@ -27,17 +64,11 @@ model Package {
 
 model Inquiry {
   id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
   packageId   String
   package     Package  @relation(fields: [packageId], references: [id])
   phone       String
   peopleCount Int      @default(1)
   createdAt   DateTime @default(now())
-}
-
-model User {
-  id           String   @id @default(cuid())
-  email        String   @unique
-  passwordHash String
-  name         String?
-  createdAt    DateTime @default(now())
 }
