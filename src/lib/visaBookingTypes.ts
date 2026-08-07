@@ -1,21 +1,29 @@
-export type VisaEntry = {
+// src/lib/visaBookingTypes.ts
+
+export type VisaRow = {
+  id: string; // local-only id (React key), not necessarily a saved database id
+  visaCategory: string; // e.g. "Saudi Umrah", "UK Tourist", "Schengen Business" — replaces old visaType
   applicantName: string;
-  visaType: string;
+  passportNumber: string; // NEW field this session, wasn't in the old schema at all
   processingType: string;
-  issueDate: string;
+  submissionDate: string; // "YYYY-MM-DD" string, matches an <input type="date">
   expiryDate: string;
-  visaFee: number;
-  serviceCharge: number;
-  confirmationNo: string;
+  buyingCost: number;
+  sellingPrice: number;
 };
 
-export const emptyVisaEntry: VisaEntry = {
-  applicantName: "",
-  visaType: "",
-  processingType: "",
-  issueDate: "",
-  expiryDate: "",
-  visaFee: 0,
-  serviceCharge: 0,
-  confirmationNo: "",
-};
+export const PROCESSING_TYPES = ["Normal", "Urgent", "Express"];
+
+export function emptyVisaRow(): VisaRow {
+  return {
+    id: crypto.randomUUID(),
+    visaCategory: "",
+    applicantName: "",
+    passportNumber: "",
+    processingType: "",
+    submissionDate: "",
+    expiryDate: "",
+    buyingCost: 0,
+    sellingPrice: 0,
+  };
+}

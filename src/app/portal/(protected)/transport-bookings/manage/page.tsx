@@ -1,79 +1,121 @@
+// src/app/portal/(protected)/transport-bookings/manage/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
 import Link from "next/link";
+import { calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import { formatDateDDMMYYYY } from "@/src/lib/formatDate";
+
+type SegmentRow = {
+  id: string;
+  vehicle: string;
+  sector: string;
+  pickupDate: string;
+  buyingCost: number;
+  sellingPrice: number;
+};
+
+type Booking = {
+  id: string;
+  agentName: string;
+  guestName: string;
+  currency: string;
+  discount: number;
+  vatPercent: number;
+  createdAt: string;
+  segments: SegmentRow[];
+};
 
 export default function ManageTransportBookingsPage() {
-  const [bookings, setBookings] = useState<any[]>([]);
-  const [error, setError] = useState("");
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-
-  async function loadBookings() {
-    setLoading(true);
-    setError("");
-    try {
-      const res = await fetch("/api/transport-bookings");
-      if (!res.ok) throw new Error("Failed to load bookings");
-      const data = await res.json();
-      setBookings(data);
-    } catch (err) {
-      setError("Could not load transport bookings. Please refresh the page.");
-    } finally {
-      setLoading(false);
-    }
-  }
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadBookings();
+    async function load() {
+      try {
+        const res = await fetch("/api/transport-bookings");
+        if (!res.ok) throw new Error("Failed to load bookings");
+        const data = await res.json();
+        setBookings(data);
+      } catch (err) {
+        console.error(err);
+        setError("Could not load transport bookings.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
   async function handleDelete(id: string) {
-    if (!confirm("Delete this booking?")) return;
-
+    if (!confirm("Delete this transport booking? This cannot be undone.")) return;
     try {
       const res = await fetch(`/api/transport-bookings/${id}`, { method: "DELETE" });
       if (!res.ok) throw new Error("Delete failed");
-      setBookings((prev) => prev.filter((b) => b.id !== id));
+      setBookings((rows) => rows.filter((b) => b.id !== id));
     } catch (err) {
-      alert("Could not delete booking. Please try again.");
+      console.error(err);
+      alert("Could not delete this booking.");
     }
   }
-
-  if (loading) return <div className="p-4">Loading...</div>;
 
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Manage Transport Bookings</h1>
 
-      {error && <p className="text-red-600 mb-4">{error}</p>}
+      {loading && <p>Loading...</p>}
+      {error && <p className="text-red-600">{error}</p>}
 
-      {bookings.length === 0 && !error && <p>No transport bookings yet.</p>}
+      {!loading && !error && (
+        <table className="border w-full">
+          <thead>
+            <tr className="border">
+              <th className="border p-2 text-left">Guest</th>
+              <th className="border p-2 text-left">Agent</th>
+              <th className="border p-2 text-left">Segments</th>
+              <th className="border p-2 text-left">Currency</th>
+              <th className="border p-2 text-left">Net Total</th>
+              <th className="border p-2 text-left">Profit</th>
+              <th className="border p-2 text-left">Date</th>
+              <th className="border p-2 text-left">Actions</th>
+            </tr>
+          </thead>
+          <tbody>
+            {bookings.map((booking) => {
+              const grossBuying = booking.segments.reduce((sum, s) => sum + s.buyingCost, 0);
+              const grossSelling = booking.segments.reduce((sum, s) => sum + s.sellingPrice, 0);
+              const totals = calculateFooterTotals({
+                grossBuying,
+                grossSelling,
+                discount: booking.discount,
+                vatPercent: booking.vatPercent,
+              });
 
-      <div className="space-y-3">
-        {bookings.map((booking) => (
-          <div key={booking.id} className="border p-4">
-            <p className="font-medium">{booking.guestName}</p>
-            <p className="text-sm">Agent: {booking.agentName}</p>
-            <p className="text-sm">Nationality: {booking.nationality}</p>
-            <p className="text-sm">Segments: {booking.segments.length}</p>
-
-            <div className="mt-2 space-x-2">
-              <Link
-                href={`/portal/transport-bookings/${booking.id}/edit`}
-                className="border px-2 py-1 inline-block"
-              >
-                Edit
-              </Link>
-              <button
-                onClick={() => handleDelete(booking.id)}
-                className="border px-2 py-1"
-              >
-                Delete
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
+              return (
+                <tr key={booking.id} className="border">
+                  <td className="border p-2">{booking.guestName}</td>
+                  <td className="border p-2">{booking.agentName}</td>
+                  <td className="border p-2">{booking.segments.length}</td>
+                  <td className="border p-2">{booking.currency}</td>
+                  <td className="border p-2">{totals.netTotal.toFixed(2)}</td>
+                  <td className="border p-2">{totals.profit.toFixed(2)}</td>
+                  <td className="border p-2">{formatDateDDMMYYYY(booking.createdAt)}</td>
+                  <td className="border p-2">
+                    <Link className="underline mr-2" href={`/portal/transport-bookings/${booking.id}/edit`}>
+                      Edit
+                    </Link>
+                    <button className="underline text-red-600" onClick={() => handleDelete(booking.id)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
+          </tbody>
+        </table>
+      )}
     </div>
   );
 }

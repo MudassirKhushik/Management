@@ -1,118 +1,109 @@
+// src/app/api/visa-bookings/[id]/route.ts
+
 import { NextResponse } from "next/server";
-import { auth } from "../../../../../auth";
 import { prisma } from "@/src/lib/prisma";
+import { auth } from "../../../../../auth";
 
-// GET one
-export async function GET(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+type RouteParams = {
+  params: Promise<{ id: string }>;
+};
+
+export async function GET(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const booking = await prisma.visaBooking.findUnique({
+      where: { id },
+      include: { entries: true },
+    });
+
+    if (!booking || booking.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    return NextResponse.json(booking);
+  } catch (error: any) {
+    console.error("Error in visa-bookings GET [id] route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
-
-  const { id } = await params;
-  const booking = await prisma.visaBooking.findUnique({
-    where: { id },
-    include: { entries: true },
-  });
-
-  if (!booking || booking.agencyId !== session.user.agencyId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  return NextResponse.json(booking);
 }
 
-// PUT — edit (replaces entries)
-export async function PUT(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-  }
+export async function PUT(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const { id } = await params;
-  const existing = await prisma.visaBooking.findUnique({ where: { id } });
+    const existing = await prisma.visaBooking.findUnique({ where: { id } });
+    if (!existing || existing.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
 
-  if (!existing || existing.agencyId !== session.user.agencyId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
+    const body = await request.json();
 
-  const body = await request.json();
-  const {
-    agentName,
-    agentNo,
-    nationality,
-    guestName,
-    contactName,
-    mobileNo,
-    clientRefNo,
-    groupNo,
-    localRefNo,
-    reservationNo,
-    totalAmount,
-    subAmount,
-    entries,
-  } = body;
+    // Safely remove older sub-entries first to clear previous line items
+    await prisma.visaEntry.deleteMany({ where: { visaBookingId: id } });
 
-  await prisma.visaEntry.deleteMany({ where: { visaBookingId: id } });
-
-  const updated = await prisma.visaBooking.update({
-    where: { id },
-    data: {
-      agentName,
-      agentNo,
-      nationality,
-      guestName,
-      contactName,
-      mobileNo,
-      clientRefNo,
-      groupNo,
-      localRefNo,
-      reservationNo,
-      totalAmount,
-      subAmount,
-      entries: {
-        create: entries.map((e: any) => ({
-          applicantName: e.applicantName,
-          visaType: e.visaType,
-          processingType: e.processingType,
-          issueDate: e.issueDate ? new Date(e.issueDate) : null,
-          expiryDate: e.expiryDate ? new Date(e.expiryDate) : null,
-          visaFee: e.visaFee,
-          serviceCharge: e.serviceCharge ?? 0,
-          confirmationNo: e.confirmationNo,
-        })),
+    const booking = await prisma.visaBooking.update({
+      where: { id },
+      data: {
+        agentName: body.agentName,
+        guestName: body.guestName,
+        nationality: body.nationality,
+        mobileNo: body.mobileNo || "",
+        referenceNo: body.referenceNo || null,
+        currency: body.currency || "PKR",
+        discount: parseFloat(body.discount) || 0,
+        vatPercent: parseFloat(body.vatPercent) || 0,
+        paymentType: body.paymentType || null,
+        note: body.note || null,
+        entries: {
+          create: (body.entries || []).map((row: any) => ({
+            visaCategory: row.visaCategory,
+            applicantName: row.applicantName,
+            passportNumber: row.passportNumber,
+            processingType: row.processingType || null,
+            submissionDate: row.submissionDate ? new Date(row.submissionDate) : null,
+            expiryDate: row.expiryDate ? new Date(row.expiryDate) : null,
+            buyingCost: parseFloat(row.buyingCost) || 0,
+            sellingPrice: parseFloat(row.sellingPrice) || 0,
+          })),
+        },
       },
-    },
-    include: { entries: true },
-  });
+      include: { entries: true },
+    });
 
-  return NextResponse.json(updated);
+    return NextResponse.json(booking);
+  } catch (error: any) {
+    console.error("Error in visa-bookings PUT [id] route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
 }
 
-// DELETE
-export async function DELETE(
-  request: Request,
-  { params }: { params: Promise<{ id: string }> }
-) {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+export async function DELETE(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const existing = await prisma.visaBooking.findUnique({ where: { id } });
+    if (!existing || existing.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    await prisma.visaBooking.delete({ where: { id } });
+
+    return NextResponse.json({ success: true });
+  } catch (error: any) {
+    console.error("Error in visa-bookings DELETE [id] route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
-
-  const { id } = await params;
-  const existing = await prisma.visaBooking.findUnique({ where: { id } });
-
-  if (!existing || existing.agencyId !== session.user.agencyId) {
-    return NextResponse.json({ error: "Not found" }, { status: 404 });
-  }
-
-  await prisma.visaBooking.delete({ where: { id } });
-
-  return NextResponse.json({ success: true });
 }

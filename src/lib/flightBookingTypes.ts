@@ -12,7 +12,8 @@ export type FlightSegment = {
   children: number;
   infants: number;
   baggage: string;
-  rate: number;
+  buyingCost: number;   // 🛠️ Structural parameter sync
+  sellingPrice: number; // 🛠️ Structural parameter sync
 };
 
 export const emptyFlightSegment: FlightSegment = {
@@ -29,5 +30,6 @@ export const emptyFlightSegment: FlightSegment = {
   children: 0,
   infants: 0,
   baggage: "",
-  rate: 0,
+  buyingCost: 0,        // 🛠️ Uniform initial states
+  sellingPrice: 0,       // 🛠️ Uniform initial states
 };

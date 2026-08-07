@@ -1,236 +1,332 @@
+// src/app/portal/(protected)/hotel-bookings/[id]/edit/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
-import { HotelRow, emptyHotelRow } from "@/src/lib/hotelBookingTypes";
+import { useRouter, useParams } from "next/navigation";
+import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
+import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
+import {
+  emptyGlobalHeader,
+  emptyFooterData,
+  GlobalHeaderData,
+  FooterData,
+} from "@/src/lib/sharedBookingFields";
+import { HotelRow, ROOM_TYPES, MEAL_PLANS, emptyHotelRow } from "@/src/lib/hotelBookingTypes";
+import { calculateHotelEntryTotals, sumLineItems } from "@/src/lib/pricingCalculations";
 
 export default function EditHotelBookingPage() {
-  const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
 
-  const [error, setError] = useState("");
+  const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
+  const [footer, setFooter] = useState<FooterData>(emptyFooterData);
+  const [hotels, setHotels] = useState<HotelRow[]>([]);
   const [loading, setLoading] = useState(true);
-
-  const [form, setForm] = useState({
-    agentName: "",
-    agentNo: "",
-    nationality: "",
-    guestName: "",
-    contactName: "",
-    mobileNo: "",
-    clientRefNo: "",
-    groupNo: "",
-    localRefNo: "",
-    vatNumber: "",
-    optionDate: "",
-    totalAmount: 0,
-    subAmount: 0,
-  });
-
-  const [hotels, setHotels] = useState<HotelRow[]>([{ ...emptyHotelRow }]);
+  const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    async function load() {
+    async function loadBooking() {
       try {
         const res = await fetch(`/api/hotel-bookings/${id}`);
-        if (!res.ok) throw new Error("Not found");
+        if (!res.ok) throw new Error("Failed to load");
         const data = await res.json();
 
-        setForm({
-          agentName: data.agentName || "",
-          agentNo: data.agentNo || "",
-          nationality: data.nationality || "",
-          guestName: data.guestName || "",
-          contactName: data.contactName || "",
-          mobileNo: data.mobileNo || "",
-          clientRefNo: data.clientRefNo || "",
-          groupNo: data.groupNo || "",
-          localRefNo: data.localRefNo || "",
-          vatNumber: data.vatNumber || "",
-          optionDate: data.optionDate ? data.optionDate.slice(0, 10) : "",
-          totalAmount: data.totalAmount,
-          subAmount: data.subAmount,
+        setHeader({
+          agentName: data.agentName,
+          guestName: data.guestName,
+          nationality: data.nationality,
+          mobileNo: data.mobileNo,
+          referenceNo: data.referenceNo || "",
+          currency: data.currency,
         });
-
+        setFooter({
+          discount: data.discount,
+          vatPercent: data.vatPercent,
+          paymentType: data.paymentType || "",
+          note: data.note || "",
+        });
         setHotels(
-          data.hotels.map((h: any) => ({
-            hotelName: h.hotelName,
-            city: h.city,
-            roomType: h.roomType,
-            checkIn: h.checkIn.slice(0, 10),
-            checkOut: h.checkOut.slice(0, 10),
-            rooms: h.rooms,
-            adults: h.adults,
-            children: h.children,
-            meals: h.meals || "",
-            dayRate: h.dayRate,
-            mlRate: h.mlRate,
-            confirmationNo: h.confirmationNo || "",
+          data.hotels.map((row: any) => ({
+            id: row.id,
+            hotelName: row.hotelName,
+            city: row.city,
+            roomType: row.roomType,
+            checkIn: row.checkIn.slice(0, 10),
+            checkOut: row.checkOut.slice(0, 10),
+            rooms: row.rooms,
+            adults: row.adults,
+            children: row.children,
+            infants: row.infants,
+            mealPlan: row.mealPlan || "",
+            confirmationNo: row.confirmationNo || "",
+            buyingCostPerNight: row.buyingCostPerNight,
+            sellingPricePerNight: row.sellingPricePerNight,
           }))
         );
       } catch (err) {
+        console.error(err);
         setError("Could not load this booking.");
       } finally {
         setLoading(false);
       }
     }
-    load();
+    loadBooking();
   }, [id]);
 
-  function updateForm(field: string, value: string | number) {
-    setForm((prev) => ({ ...prev, [field]: value }));
-  }
-
-  function updateHotel(index: number, field: keyof HotelRow, value: string | number) {
-    setHotels((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
+  function updateHotelRow(rowId: string, field: keyof HotelRow, value: string | number) {
+    setHotels((rows) => rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)));
   }
 
   function addHotelRow() {
-    setHotels((prev) => [...prev, { ...emptyHotelRow }]);
+    setHotels((rows) => [...rows, emptyHotelRow()]);
   }
 
-  function removeHotelRow(index: number) {
-    setHotels((prev) => prev.filter((_, i) => i !== index));
+  function removeHotelRow(rowId: string) {
+    setHotels((rows) => (rows.length > 1 ? rows.filter((row) => row.id !== rowId) : rows));
   }
+
+  const lineTotals = hotels
+    .filter((row) => row.checkIn && row.checkOut)
+    .map((row) => calculateHotelEntryTotals(row));
+  const { grossBuying, grossSelling } = sumLineItems(
+    lineTotals.map((t) => ({ buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal }))
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSaving(true);
 
     try {
       const res = await fetch(`/api/hotel-bookings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, hotels }),
+        body: JSON.stringify({ ...header, ...footer, hotels }),
       });
 
-      if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Could not save changes");
-        return;
-      }
+      if (!res.ok) throw new Error("Server rejected the update");
 
       router.push("/portal/hotel-bookings/manage");
     } catch (err) {
-      setError("Could not save changes. Please try again.");
+      console.error(err);
+      setError("Could not save changes. Please check the fields and try again.");
+    } finally {
+      setSaving(false);
     }
   }
 
-  if (loading) return <div className="p-4">Loading...</div>;
-  if (error && hotels.length === 0) return <div className="p-4 text-red-600">{error}</div>;
+  if (loading) return <p className="p-4">Loading...</p>;
 
   return (
     <div className="p-4">
       <h1 className="text-xl font-bold mb-4">Edit Hotel Booking</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="border p-4 space-y-2">
-          <h2 className="font-semibold">Booking Details</h2>
+      <form onSubmit={handleSubmit}>
+        <GlobalHeaderFields
+          value={header}
+          onChange={(field, value) => setHeader((h) => ({ ...h, [field]: value }))}
+        />
 
-          <input className="border p-2 w-full" placeholder="Agent Name"
-            value={form.agentName} onChange={(e) => updateForm("agentName", e.target.value)} required />
-          <input className="border p-2 w-full" placeholder="Agent No"
-            value={form.agentNo} onChange={(e) => updateForm("agentNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Nationality"
-            value={form.nationality} onChange={(e) => updateForm("nationality", e.target.value)} required />
-          <input className="border p-2 w-full" placeholder="Guest Name"
-            value={form.guestName} onChange={(e) => updateForm("guestName", e.target.value)} required />
-          <input className="border p-2 w-full" placeholder="Contact Name"
-            value={form.contactName} onChange={(e) => updateForm("contactName", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Mobile No"
-            value={form.mobileNo} onChange={(e) => updateForm("mobileNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Client Ref No"
-            value={form.clientRefNo} onChange={(e) => updateForm("clientRefNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Group No"
-            value={form.groupNo} onChange={(e) => updateForm("groupNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Local Ref No"
-            value={form.localRefNo} onChange={(e) => updateForm("localRefNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="VAT Number"
-            value={form.vatNumber} onChange={(e) => updateForm("vatNumber", e.target.value)} />
+        <fieldset className="border p-4 mb-4">
+          <legend className="font-bold px-1">Hotels</legend>
 
-          <label className="block text-sm">Option Date</label>
-          <input type="date" className="border p-2 w-full"
-            value={form.optionDate} onChange={(e) => updateForm("optionDate", e.target.value)} />
-
-          <label className="block text-sm">Total Amount</label>
-          <input type="number" className="border p-2 w-full"
-            value={form.totalAmount} onChange={(e) => updateForm("totalAmount", Number(e.target.value))} />
-
-          <label className="block text-sm">Sub Amount</label>
-          <input type="number" className="border p-2 w-full"
-            value={form.subAmount} onChange={(e) => updateForm("subAmount", Number(e.target.value))} />
-        </div>
-
-        <div className="space-y-4">
-          <h2 className="font-semibold">Hotels</h2>
-
-          {hotels.map((hotel, index) => (
-            <div key={index} className="border p-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="font-medium">Hotel {index + 1}</span>
-                {hotels.length > 1 && (
-                  <button type="button" onClick={() => removeHotelRow(index)}>
-                    Remove
-                  </button>
-                )}
+          {hotels.map((row, index) => (
+            <div key={row.id} className="border p-3 mb-3">
+              <div className="flex justify-between items-center mb-2">
+                <strong>Hotel {index + 1}</strong>
+                <button type="button" className="border px-2" onClick={() => removeHotelRow(row.id)}>
+                  Remove
+                </button>
               </div>
 
-              <input className="border p-2 w-full" placeholder="Hotel Name"
-                value={hotel.hotelName} onChange={(e) => updateHotel(index, "hotelName", e.target.value)} required />
-              <input className="border p-2 w-full" placeholder="City"
-                value={hotel.city} onChange={(e) => updateHotel(index, "city", e.target.value)} required />
-              <input className="border p-2 w-full" placeholder="Room Type"
-                value={hotel.roomType} onChange={(e) => updateHotel(index, "roomType", e.target.value)} required />
+              <div className="mb-2">
+                <label className="block">Hotel Name</label>
+                <input
+                  type="text"
+                  className="border p-2 w-full"
+                  value={row.hotelName}
+                  onChange={(e) => updateHotelRow(row.id, "hotelName", e.target.value)}
+                  required
+                />
+              </div>
 
-              <label className="block text-sm">Check In</label>
-              <input type="date" className="border p-2 w-full"
-                value={hotel.checkIn} onChange={(e) => updateHotel(index, "checkIn", e.target.value)} required />
+              <div className="mb-2">
+                <label className="block">City</label>
+                <input
+                  type="text"
+                  className="border p-2 w-full"
+                  value={row.city}
+                  onChange={(e) => updateHotelRow(row.id, "city", e.target.value)}
+                  required
+                />
+              </div>
 
-              <label className="block text-sm">Check Out</label>
-              <input type="date" className="border p-2 w-full"
-                value={hotel.checkOut} onChange={(e) => updateHotel(index, "checkOut", e.target.value)} required />
+              <div className="mb-2">
+                <label className="block">Room Type</label>
+                <select
+                  className="border p-2 w-full"
+                  value={row.roomType}
+                  onChange={(e) => updateHotelRow(row.id, "roomType", e.target.value)}
+                >
+                  {ROOM_TYPES.map((type) => (
+                    <option key={type} value={type}>
+                      {type}
+                    </option>
+                  ))}
+                </select>
+              </div>
 
-              <label className="block text-sm">Rooms</label>
-              <input type="number" className="border p-2 w-full"
-                value={hotel.rooms} onChange={(e) => updateHotel(index, "rooms", Number(e.target.value))} />
+              <div className="mb-2">
+                <label className="block">Check-In Date</label>
+                <input
+                  type="date"
+                  className="border p-2 w-full"
+                  value={row.checkIn}
+                  onChange={(e) => updateHotelRow(row.id, "checkIn", e.target.value)}
+                  required
+                />
+              </div>
 
-              <label className="block text-sm">Adults</label>
-              <input type="number" className="border p-2 w-full"
-                value={hotel.adults} onChange={(e) => updateHotel(index, "adults", Number(e.target.value))} />
+              <div className="mb-2">
+                <label className="block">Check-Out Date</label>
+                <input
+                  type="date"
+                  className="border p-2 w-full"
+                  value={row.checkOut}
+                  onChange={(e) => updateHotelRow(row.id, "checkOut", e.target.value)}
+                  required
+                />
+              </div>
 
-              <label className="block text-sm">Children</label>
-              <input type="number" className="border p-2 w-full"
-                value={hotel.children} onChange={(e) => updateHotel(index, "children", Number(e.target.value))} />
+              <div className="mb-2">
+                <label className="block">Nights (auto-calculated)</label>
+                <input
+                  type="text"
+                  className="border p-2 w-full bg-gray-100"
+                  value={row.checkIn && row.checkOut ? calculateHotelEntryTotals(row).nights : 0}
+                  disabled
+                />
+              </div>
 
-              <input className="border p-2 w-full" placeholder="Meals"
-                value={hotel.meals} onChange={(e) => updateHotel(index, "meals", e.target.value)} />
+              <div className="mb-2">
+                <label className="block">No. of Rooms</label>
+                <input
+                  type="number"
+                  min={1}
+                  className="border p-2 w-full"
+                  value={row.rooms}
+                  onChange={(e) => updateHotelRow(row.id, "rooms", parseInt(e.target.value) || 1)}
+                />
+              </div>
 
-              <label className="block text-sm">Day Rate</label>
-              <input type="number" className="border p-2 w-full"
-                value={hotel.dayRate} onChange={(e) => updateHotel(index, "dayRate", Number(e.target.value))} required />
+              <div className="mb-2">
+                <label className="block">No. of Adults</label>
+                <input
+                  type="number"
+                  min={1}
+                  className="border p-2 w-full"
+                  value={row.adults}
+                  onChange={(e) => updateHotelRow(row.id, "adults", parseInt(e.target.value) || 1)}
+                />
+              </div>
 
-              <label className="block text-sm">ML Rate</label>
-              <input type="number" className="border p-2 w-full"
-                value={hotel.mlRate} onChange={(e) => updateHotel(index, "mlRate", Number(e.target.value))} />
+              <div className="mb-2">
+                <label className="block">No. of Children</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="border p-2 w-full"
+                  value={row.children}
+                  onChange={(e) => updateHotelRow(row.id, "children", parseInt(e.target.value) || 0)}
+                />
+              </div>
 
-              <input className="border p-2 w-full" placeholder="Confirmation No"
-                value={hotel.confirmationNo} onChange={(e) => updateHotel(index, "confirmationNo", e.target.value)} />
+              <div className="mb-2">
+                <label className="block">No. of Infants</label>
+                <input
+                  type="number"
+                  min={0}
+                  className="border p-2 w-full"
+                  value={row.infants}
+                  onChange={(e) => updateHotelRow(row.id, "infants", parseInt(e.target.value) || 0)}
+                />
+              </div>
+
+              <div className="mb-2">
+                <label className="block">Meal Plan</label>
+                <select
+                  className="border p-2 w-full"
+                  value={row.mealPlan}
+                  onChange={(e) => updateHotelRow(row.id, "mealPlan", e.target.value)}
+                >
+                  <option value="">Select meal plan</option>
+                  {MEAL_PLANS.map((plan) => (
+                    <option key={plan.value} value={plan.value}>
+                      {plan.label}
+                    </option>
+                  ))}
+                </select>
+              </div>
+
+              <div className="mb-2">
+                <label className="block">Confirmation / Voucher No</label>
+                <input
+                  type="text"
+                  className="border p-2 w-full"
+                  value={row.confirmationNo}
+                  onChange={(e) => updateHotelRow(row.id, "confirmationNo", e.target.value)}
+                />
+              </div>
+
+              <div className="mb-2">
+                <label className="block">Buying Cost (Per Night)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="border p-2 w-full"
+                  value={row.buyingCostPerNight}
+                  onChange={(e) =>
+                    updateHotelRow(row.id, "buyingCostPerNight", parseFloat(e.target.value) || 0)
+                  }
+                  required
+                />
+              </div>
+
+              <div className="mb-2">
+                <label className="block">Selling Price (Per Night)</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  className="border p-2 w-full"
+                  value={row.sellingPricePerNight}
+                  onChange={(e) =>
+                    updateHotelRow(row.id, "sellingPricePerNight", parseFloat(e.target.value) || 0)
+                  }
+                  required
+                />
+              </div>
             </div>
           ))}
 
-          <button type="button" onClick={addHotelRow} className="border p-2">
+          <button type="button" className="border px-3 py-1" onClick={addHotelRow}>
             + Add Another Hotel
           </button>
-        </div>
+        </fieldset>
 
-        {error && <p className="text-red-600">{error}</p>}
+        <PricingFooterFields
+          value={footer}
+          onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
+          grossBuying={grossBuying}
+          grossSelling={grossSelling}
+        />
 
-        <button type="submit" className="border p-2 bg-gray-200">
-          Save Changes
+        {error && <p className="text-red-600 mb-2">{error}</p>}
+
+        <button type="submit" className="border px-4 py-2 font-bold" disabled={saving}>
+          {saving ? "Saving..." : "Save Changes"}
         </button>
       </form>
     </div>

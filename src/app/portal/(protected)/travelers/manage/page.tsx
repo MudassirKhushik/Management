@@ -1,111 +1,140 @@
+// src/app/portal/(protected)/travelers/manage/page.tsx
+
 "use client";
 
 import { useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import Link from "next/link";
+import { calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import { formatDateDDMMYYYY } from "@/src/lib/formatDate";
 
-type Traveler = {
+type HotelEntry = { buyingCostPerNight: number; sellingPricePerNight: number };
+type TransportEntry = { buyingCost: number; sellingPrice: number };
+type FlightEntry = { buyingCost: number; sellingPrice: number };
+type VisaEntryRow = { buyingCost: number; sellingPrice: number };
+
+type Booking = {
   id: string;
-  name: string;
-  peopleCount: number;
-  price: number;
+  agentName: string;
+  guestName: string;
+  currency: string;
+  discount: number;
+  vatPercent: number;
+  createdAt: string;
+  includeHotels: boolean;
+  includeTransports: boolean;
+  includeFlights: boolean;
+  includeVisas: boolean;
+  hotels: HotelEntry[];
+  transportSegments: TransportEntry[];
+  flightSegments: FlightEntry[];
+  visaEntries: VisaEntryRow[];
 };
 
-export default function ManageTravelersPage() {
-  const router = useRouter();
-  const [travelers, setTravelers] = useState<Traveler[]>([]);
-  const [search, setSearch] = useState("");
+export default function ManagePackageBookingsPage() {
+  const [bookings, setBookings] = useState<Booking[]>([]);
   const [loading, setLoading] = useState(true);
-
-  // Fetch the full list once when the page loads
-  async function loadTravelers() {
-    setLoading(true);
-    const res = await fetch("/api/travelers");
-    const data = await res.json();
-    setTravelers(data);
-    setLoading(false);
-  }
+  const [error, setError] = useState("");
 
   useEffect(() => {
-    loadTravelers();
+    async function load() {
+      try {
+        const res = await fetch("/api/travelers");
+        if (!res.ok) throw new Error("Failed to load bookings");
+        const data = await res.json();
+        setBookings(data);
+      } catch (err) {
+        console.error(err);
+        setError("Could not load package bookings.");
+      } finally {
+        setLoading(false);
+      }
+    }
+    load();
   }, []);
 
-  // Search filters the LIST WE ALREADY HAVE in memory — no need to
-  // ask the database again on every keystroke. Fine for small lists;
-  // if this grows to thousands of rows later, we'd move filtering
-  // to the API instead.
-  const filtered = travelers.filter((t) =>
-    t.name.toLowerCase().includes(search.toLowerCase())
-  );
-
   async function handleDelete(id: string) {
-    const confirmed = window.confirm(
-      "Are you sure you want to delete this traveler? This cannot be undone."
-    );
-    if (!confirmed) return;
+    if (!confirm("Delete this package booking? This cannot be undone.")) return;
+    try {
+      const res = await fetch(`/api/travelers/${id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Delete failed");
+      setBookings((rows) => rows.filter((b) => b.id !== id));
+    } catch (err) {
+      console.error(err);
+      alert("Could not delete this booking.");
+    }
+  }
 
-    await fetch(`/api/travelers/${id}`, { method: "DELETE" });
-    // Refresh the list from the database so we always show real, current data
-    loadTravelers();
+  function servicesLabel(b: Booking) {
+    const parts: string[] = [];
+    if (b.includeHotels) parts.push("Hotel");
+    if (b.includeTransports) parts.push("Transport");
+    if (b.includeFlights) parts.push("Flight");
+    if (b.includeVisas) parts.push("Visa");
+    return parts.join(" + ") || "—";
   }
 
   return (
-    <div className="max-w-3xl mx-auto p-6">
-      <div className="flex justify-between items-center mb-4">
-        <h1 className="text-xl font-semibold">Manage Travelers</h1>
-        <button
-          onClick={() => router.push("/portal/travelers/add")}
-          className="bg-black text-white px-4 py-2 rounded text-sm"
-        >
-          + Add Traveler
-        </button>
-      </div>
+    <div className="p-4">
+      <h1 className="text-xl font-bold mb-4">Manage Package Bookings</h1>
 
-      <input
-        type="text"
-        placeholder="Search by name..."
-        value={search}
-        onChange={(e) => setSearch(e.target.value)}
-        className="w-full border rounded px-3 py-2 mb-4"
-      />
+      {loading && <p>Loading...</p>}
+      {error && <p className="text-red-600">{error}</p>}
 
-      {loading ? (
-        <p className="text-gray-500">Loading...</p>
-      ) : filtered.length === 0 ? (
-        <p className="text-gray-500">No travelers found.</p>
-      ) : (
-        <table className="w-full border-collapse text-sm">
+      {!loading && !error && (
+        <table className="border w-full">
           <thead>
-            <tr className="text-left border-b">
-              <th className="py-2">Name</th>
-              <th className="py-2">People</th>
-              <th className="py-2">Price</th>
-              <th className="py-2">Actions</th>
+            <tr className="border">
+              <th className="border p-2 text-left">Guest</th>
+              <th className="border p-2 text-left">Agent</th>
+              <th className="border p-2 text-left">Services</th>
+              <th className="border p-2 text-left">Currency</th>
+              <th className="border p-2 text-left">Net Total</th>
+              <th className="border p-2 text-left">Profit</th>
+              <th className="border p-2 text-left">Date</th>
+              <th className="border p-2 text-left">Actions</th>
             </tr>
           </thead>
           <tbody>
-            {filtered.map((t) => (
-              <tr key={t.id} className="border-b">
-                <td className="py-2">{t.name}</td>
-                <td className="py-2">{t.peopleCount}</td>
-                <td className="py-2">{t.price}</td>
-                <td className="py-2 space-x-3">
-                  <button
-                    onClick={() =>
-                      router.push(`/portal/travelers/${t.id}/edit`)
-                    }
-                    className="text-blue-600 hover:underline"
-                  >
-                    Edit
-                  </button>
-                  <button
-                    onClick={() => handleDelete(t.id)}
-                    className="text-red-600 hover:underline"
-                  >
-                    Delete
-                  </button>
-                </td>
-              </tr>
-            ))}
+            {bookings.map((booking) => {
+              const hotelBuying = booking.hotels.reduce((sum, e) => sum + e.buyingCostPerNight, 0);
+              const hotelSelling = booking.hotels.reduce((sum, e) => sum + e.sellingPricePerNight, 0);
+              const transportBuying = booking.transportSegments.reduce((sum, e) => sum + e.buyingCost, 0);
+              const transportSelling = booking.transportSegments.reduce((sum, e) => sum + e.sellingPrice, 0);
+              const flightBuying = booking.flightSegments.reduce((sum, e) => sum + e.buyingCost, 0);
+              const flightSelling = booking.flightSegments.reduce((sum, e) => sum + e.sellingPrice, 0);
+              const visaBuying = booking.visaEntries.reduce((sum, e) => sum + e.buyingCost, 0);
+              const visaSelling = booking.visaEntries.reduce((sum, e) => sum + e.sellingPrice, 0);
+
+              const grossBuying = hotelBuying + transportBuying + flightBuying + visaBuying;
+              const grossSelling = hotelSelling + transportSelling + flightSelling + visaSelling;
+
+              const totals = calculateFooterTotals({
+                grossBuying,
+                grossSelling,
+                discount: booking.discount,
+                vatPercent: booking.vatPercent,
+              });
+
+              return (
+                <tr key={booking.id} className="border">
+                  <td className="border p-2">{booking.guestName}</td>
+                  <td className="border p-2">{booking.agentName}</td>
+                  <td className="border p-2">{servicesLabel(booking)}</td>
+                  <td className="border p-2">{booking.currency}</td>
+                  <td className="border p-2">{totals.netTotal.toFixed(2)}</td>
+                  <td className="border p-2">{totals.profit.toFixed(2)}</td>
+                  <td className="border p-2">{formatDateDDMMYYYY(booking.createdAt)}</td>
+                  <td className="border p-2">
+                    <Link className="underline mr-2" href={`/portal/travelers/${booking.id}/edit`}>
+                      Edit
+                    </Link>
+                    <button className="underline text-red-600" onClick={() => handleDelete(booking.id)}>
+                      Delete
+                    </button>
+                  </td>
+                </tr>
+              );
+            })}
           </tbody>
         </table>
       )}

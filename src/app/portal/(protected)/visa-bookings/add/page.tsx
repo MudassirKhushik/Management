@@ -2,162 +2,237 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { VisaEntry, emptyVisaEntry } from "@/src/lib/visaBookingTypes";
+import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
+import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
+import {
+  emptyGlobalHeader,
+  emptyFooterData,
+  GlobalHeaderData,
+  FooterData,
+} from "@/src/lib/sharedBookingFields";
+import { VisaRow, PROCESSING_TYPES, emptyVisaRow } from "@/src/lib/visaBookingTypes";
+import { sumLineItems } from "@/src/lib/pricingCalculations";
 
 export default function AddVisaBookingPage() {
   const router = useRouter();
+
+  const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
+  const [footer, setFooter] = useState<FooterData>(emptyFooterData);
+  const [entries, setEntries] = useState<VisaRow[]>([emptyVisaRow()]);
   const [error, setError] = useState("");
+  const [saving, setSaving] = useState(false);
 
-  const [form, setForm] = useState({
-    agentName: "",
-    agentNo: "",
-    nationality: "",
-    guestName: "",
-    contactName: "",
-    mobileNo: "",
-    clientRefNo: "",
-    groupNo: "",
-    localRefNo: "",
-    reservationNo: "",
-    totalAmount: 0,
-    subAmount: 0,
-  });
-
-  const [entries, setEntries] = useState<VisaEntry[]>([{ ...emptyVisaEntry }]);
-
-  function updateForm(field: string, value: string | number) {
-    setForm((prev) => ({ ...prev, [field]: value }));
+  function updateRow(rowId: string, field: keyof VisaRow, value: string | number) {
+    setEntries((rows) => rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)));
   }
 
-  function updateEntry(index: number, field: keyof VisaEntry, value: string | number) {
-    setEntries((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
+  function addRow() {
+    setEntries((rows) => [...rows, emptyVisaRow()]);
   }
 
-  function addEntry() {
-    setEntries((prev) => [...prev, { ...emptyVisaEntry }]);
+  function removeRow(rowId: string) {
+    setEntries((rows) => (rows.length > 1 ? rows.filter((row) => row.id !== rowId) : rows));
   }
 
-  function removeEntry(index: number) {
-    setEntries((prev) => prev.filter((_, i) => i !== index));
-  }
+  const { grossBuying, grossSelling } = sumLineItems(
+    entries.map((row) => ({ buyingCost: row.buyingCost, sellingPrice: row.sellingPrice }))
+  );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    setSaving(true);
 
     try {
       const res = await fetch("/api/visa-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...form, entries }),
+        body: JSON.stringify({
+          ...header,
+          ...footer,
+          entries,
+        }),
       });
 
       if (!res.ok) {
-        const data = await res.json();
-        setError(data.error || "Something went wrong");
-        return;
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || `Server responded with status ${res.status}`);
       }
 
       router.push("/portal/visa-bookings/manage");
-    } catch (err) {
-      setError("Could not save booking. Please try again.");
+    } catch (err: any) {
+      console.error("Submission failed:", err);
+      setError(err.message || "Could not create booking. Please try again.");
+    } finally {
+      setSaving(false);
     }
   }
 
   return (
-    <div className="p-4">
-      <h1 className="text-xl font-bold mb-4">Add Visa Booking</h1>
+    <div className="p-4 max-w-5xl mx-auto">
+      <h1 className="text-xl font-bold mb-4">Create Visa Booking</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6">
-        <div className="border p-4 space-y-2">
-          <h2 className="font-semibold">Booking Details</h2>
-
-          <input className="border p-2 w-full" placeholder="Agent Name"
-            value={form.agentName} onChange={(e) => updateForm("agentName", e.target.value)} required />
-          <input className="border p-2 w-full" placeholder="Agent No"
-            value={form.agentNo} onChange={(e) => updateForm("agentNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Nationality"
-            value={form.nationality} onChange={(e) => updateForm("nationality", e.target.value)} required />
-          <input className="border p-2 w-full" placeholder="Guest Name"
-            value={form.guestName} onChange={(e) => updateForm("guestName", e.target.value)} required />
-          <input className="border p-2 w-full" placeholder="Contact Name"
-            value={form.contactName} onChange={(e) => updateForm("contactName", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Mobile No"
-            value={form.mobileNo} onChange={(e) => updateForm("mobileNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Client Ref No"
-            value={form.clientRefNo} onChange={(e) => updateForm("clientRefNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Group No"
-            value={form.groupNo} onChange={(e) => updateForm("groupNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Local Ref No"
-            value={form.localRefNo} onChange={(e) => updateForm("localRefNo", e.target.value)} />
-          <input className="border p-2 w-full" placeholder="Reservation No"
-            value={form.reservationNo} onChange={(e) => updateForm("reservationNo", e.target.value)} />
-
-          <label className="block text-sm">Total Amount</label>
-          <input type="number" className="border p-2 w-full"
-            value={form.totalAmount} onChange={(e) => updateForm("totalAmount", Number(e.target.value))} />
-
-          <label className="block text-sm">Sub Amount</label>
-          <input type="number" className="border p-2 w-full"
-            value={form.subAmount} onChange={(e) => updateForm("subAmount", Number(e.target.value))} />
+      {error && (
+        <div className="bg-red-50 border border-red-200 text-red-700 p-3 mb-4 rounded-md font-mono text-sm">
+          <strong>Error:</strong> {error}
         </div>
+      )}
 
-        <div className="space-y-4">
-          <h2 className="font-semibold">Visa Applicants</h2>
+      <form onSubmit={handleSubmit}>
+        <GlobalHeaderFields
+          value={header}
+          onChange={(field, value) => setHeader((h) => ({ ...h, [field]: value }))}
+        />
 
-          {entries.map((entry, index) => (
-            <div key={index} className="border p-4 space-y-2">
-              <div className="flex justify-between">
-                <span className="font-medium">Applicant {index + 1}</span>
+        <fieldset className="border p-4 mb-4 rounded-md bg-white shadow-sm">
+          <legend className="font-bold px-2 text-sm text-gray-700">Visa Applicants</legend>
+
+          {entries.map((row, index) => (
+            <div key={row.id} className="border p-4 mb-4 rounded bg-gray-50 relative">
+              <div className="flex justify-between items-center mb-3">
+                <span className="font-semibold text-gray-800">Applicant #{index + 1}</span>
                 {entries.length > 1 && (
-                  <button type="button" onClick={() => removeEntry(index)}>
+                  <button
+                    type="button"
+                    className="text-sm border border-red-300 text-red-600 px-3 py-1 rounded bg-white hover:bg-red-50 transition"
+                    onClick={() => removeRow(row.id)}
+                  >
                     Remove
                   </button>
                 )}
               </div>
 
-              <input className="border p-2 w-full" placeholder="Applicant Name"
-                value={entry.applicantName} onChange={(e) => updateEntry(index, "applicantName", e.target.value)} required />
-              <input className="border p-2 w-full" placeholder="Visa Type (e.g. Umrah Visa)"
-                value={entry.visaType} onChange={(e) => updateEntry(index, "visaType", e.target.value)} required />
-              <input className="border p-2 w-full" placeholder="Processing Type (Normal/Urgent)"
-                value={entry.processingType} onChange={(e) => updateEntry(index, "processingType", e.target.value)} />
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium mb-1">Visa Category *</label>
+                  <input
+                    type="text"
+                    className="border p-2 w-full rounded bg-white"
+                    placeholder="e.g. Saudi Umrah, UK Tourist, Schengen Business"
+                    value={row.visaCategory}
+                    onChange={(e) => updateRow(row.id, "visaCategory", e.target.value)}
+                    required
+                  />
+                </div>
 
-              <label className="block text-sm">Issue Date</label>
-              <input type="date" className="border p-2 w-full"
-                value={entry.issueDate} onChange={(e) => updateEntry(index, "issueDate", e.target.value)} />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Applicant Name *</label>
+                  <input
+                    type="text"
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.applicantName}
+                    onChange={(e) => updateRow(row.id, "applicantName", e.target.value)}
+                    required
+                  />
+                </div>
 
-              <label className="block text-sm">Expiry Date</label>
-              <input type="date" className="border p-2 w-full"
-                value={entry.expiryDate} onChange={(e) => updateEntry(index, "expiryDate", e.target.value)} />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Passport Number *</label>
+                  <input
+                    type="text"
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.passportNumber}
+                    onChange={(e) => updateRow(row.id, "passportNumber", e.target.value)}
+                    required
+                  />
+                </div>
 
-              <label className="block text-sm">Visa Fee</label>
-              <input type="number" className="border p-2 w-full"
-                value={entry.visaFee} onChange={(e) => updateEntry(index, "visaFee", Number(e.target.value))} required />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Processing Type</label>
+                  <select
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.processingType}
+                    onChange={(e) => updateRow(row.id, "processingType", e.target.value)}
+                  >
+                    <option value="">Select processing type</option>
+                    {PROCESSING_TYPES.map((type) => (
+                      <option key={type} value={type}>
+                        {type}
+                      </option>
+                    ))}
+                  </select>
+                </div>
 
-              <label className="block text-sm">Service Charge</label>
-              <input type="number" className="border p-2 w-full"
-                value={entry.serviceCharge} onChange={(e) => updateEntry(index, "serviceCharge", Number(e.target.value))} />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Submission Date</label>
+                  <input
+                    type="date"
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.submissionDate}
+                    onChange={(e) => updateRow(row.id, "submissionDate", e.target.value)}
+                  />
+                </div>
 
-              <input className="border p-2 w-full" placeholder="Confirmation No"
-                value={entry.confirmationNo} onChange={(e) => updateEntry(index, "confirmationNo", e.target.value)} />
+                <div>
+                  <label className="block text-sm font-medium mb-1">Expiry Date</label>
+                  <input
+                    type="date"
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.expiryDate}
+                    onChange={(e) => updateRow(row.id, "expiryDate", e.target.value)}
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Buying Cost *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.buyingCost || ""}
+                    onChange={(e) => updateRow(row.id, "buyingCost", parseFloat(e.target.value) || 0)}
+                    required
+                  />
+                </div>
+
+                <div>
+                  <label className="block text-sm font-medium mb-1">Selling Price *</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    className="border p-2 w-full rounded bg-white"
+                    value={row.sellingPrice || ""}
+                    onChange={(e) => updateRow(row.id, "sellingPrice", parseFloat(e.target.value) || 0)}
+                    required
+                  />
+                </div>
+              </div>
             </div>
           ))}
 
-          <button type="button" onClick={addEntry} className="border p-2">
+          <button
+            type="button"
+            className="w-full mt-2 border border-dashed border-blue-400 text-blue-600 font-medium py-2 rounded bg-blue-50 hover:bg-blue-100 transition"
+            onClick={addRow}
+          >
             + Add Another Applicant
           </button>
+        </fieldset>
+
+        <PricingFooterFields
+          value={footer}
+          onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
+          grossBuying={grossBuying}
+          grossSelling={grossSelling}
+        />
+
+        <div className="flex justify-end gap-3 mt-6">
+          <button
+            type="button"
+            className="border px-5 py-2 rounded bg-white hover:bg-gray-100"
+            onClick={() => router.push("/portal/visa-bookings/manage")}
+            disabled={saving}
+          >
+            Cancel
+          </button>
+          <button
+            type="submit"
+            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded shadow transition disabled:opacity-50"
+            disabled={saving}
+          >
+            {saving ? "Saving..." : "Create Booking"}
+          </button>
         </div>
-
-        {error && <p className="text-red-600">{error}</p>}
-
-        <button type="submit" className="border p-2 bg-gray-200">
-          Save Booking
-        </button>
       </form>
     </div>
   );

@@ -1,86 +1,72 @@
+// src/app/api/transport-bookings/route.ts
+
 import { NextResponse } from "next/server";
-import { auth } from "../../../../auth";
 import { prisma } from "@/src/lib/prisma";
+import { auth } from "../../../../auth";
 
-// GET → list this agency's transport bookings
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const bookings = await prisma.transportBooking.findMany({
+      where: { agencyId: session.user.agencyId },
+      include: { segments: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(bookings);
+  } catch (error: any) {
+    console.error("Database connection error on GET /api/transport-bookings:", error);
+    return NextResponse.json([]);
   }
-
-  const bookings = await prisma.transportBooking.findMany({
-    where: { agencyId: session.user.agencyId },
-    include: { segments: true },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return NextResponse.json(bookings);
 }
 
-// POST → create booking with segments in one call
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const body = await request.json();
-  const {
-    agentName,
-    agentNo,
-    nationality,
-    guestName,
-    contactName,
-    mobileNo,
-    clientRefNo,
-    groupNo,
-    localRefNo,
-    reservationNo,
-    paymentType,
-    surcharge,
-    discount,
-    vatPercent,
-    segments,
-  } = body;
+    const body = await request.json();
 
-  if (!agentName || !nationality || !guestName || !segments || segments.length === 0) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-  }
-
-  const booking = await prisma.transportBooking.create({
-    data: {
-      agencyId: session.user.agencyId,
-      agentName,
-      agentNo,
-      nationality,
-      guestName,
-      contactName,
-      mobileNo,
-      clientRefNo,
-      groupNo,
-      localRefNo,
-      reservationNo,
-      paymentType,
-      surcharge: surcharge ?? 0,
-      discount: discount ?? 0,
-      vatPercent: vatPercent ?? 0,
-      segments: {
-        create: segments.map((s: any) => ({
-          date: new Date(s.date),
-          time: s.time,
-          fromLoc: s.fromLoc,
-          toLoc: s.toLoc,
-          vehicle: s.vehicle,
-          qty: s.qty ?? 1,
-          adults: s.adults ?? 1,
-          mlRate: s.mlRate ?? 0,
-          rate: s.rate,
-        })),
+    const booking = await prisma.transportBooking.create({
+      data: {
+        agencyId: session.user.agencyId,
+        agentName: body.agentName,
+        guestName: body.guestName,
+        nationality: body.nationality,
+        mobileNo: body.mobileNo || null,
+        referenceNo: body.referenceNo || null,
+        currency: body.currency || "USD",
+        discount: parseFloat(body.discount) || 0,
+        vatPercent: parseFloat(body.vatPercent) || 0,
+        paymentType: body.paymentType || null,
+        note: body.note || null,
+        segments: {
+          create: (body.segments || []).map((row: any) => ({
+            vehicle: row.vehicle,
+            sector: row.sector,
+            pickupDate: new Date(row.pickupDate),
+            pickupTime: row.pickupTime,
+            qty: parseInt(row.qty) || 1,
+            buyingCost: parseFloat(row.buyingCost) || 0,
+            sellingPrice: parseFloat(row.sellingPrice) || 0,
+          })),
+        },
       },
-    },
-    include: { segments: true },
-  });
+      include: { segments: true },
+    });
 
-  return NextResponse.json(booking, { status: 201 });
+    return NextResponse.json(booking, { status: 201 });
+  } catch (error: any) {
+    console.error("Critical error in transport-bookings POST route:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal Server Error" },
+      { status: 500 }
+    );
+  }
 }

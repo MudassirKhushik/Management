@@ -1,81 +1,74 @@
+// src/app/api/visa-bookings/route.ts
+
 import { NextResponse } from "next/server";
-import { auth } from "../../../../auth";
 import { prisma } from "@/src/lib/prisma";
+import { auth } from "../../../../auth";
 
-// GET → list this agency's visa bookings
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const bookings = await prisma.visaBooking.findMany({
+      where: { agencyId: session.user.agencyId },
+      include: { entries: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    return NextResponse.json(bookings);
+  } catch (error: any) {
+    console.error("Error on GET /api/visa-bookings:", error);
+    return NextResponse.json([]);
   }
-
-  const bookings = await prisma.visaBooking.findMany({
-    where: { agencyId: session.user.agencyId },
-    include: { entries: true },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return NextResponse.json(bookings);
 }
 
-// POST → create booking with visa entries in one call
 export async function POST(request: Request) {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Not logged in" }, { status: 401 });
-  }
+  try {
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
 
-  const body = await request.json();
-  const {
-    agentName,
-    agentNo,
-    nationality,
-    guestName,
-    contactName,
-    mobileNo,
-    clientRefNo,
-    groupNo,
-    localRefNo,
-    reservationNo,
-    totalAmount,
-    subAmount,
-    entries,
-  } = body;
+    const body = await request.json();
+    const entriesList = body.entries || [];
 
-  if (!agentName || !nationality || !guestName || !entries || entries.length === 0) {
-    return NextResponse.json({ error: "Missing required fields" }, { status: 400 });
-  }
-
-  const booking = await prisma.visaBooking.create({
-    data: {
-      agencyId: session.user.agencyId,
-      agentName,
-      agentNo,
-      nationality,
-      guestName,
-      contactName,
-      mobileNo,
-      clientRefNo,
-      groupNo,
-      localRefNo,
-      reservationNo,
-      totalAmount,
-      subAmount,
-      entries: {
-        create: entries.map((e: any) => ({
-          applicantName: e.applicantName,
-          visaType: e.visaType,
-          processingType: e.processingType,
-          issueDate: e.issueDate ? new Date(e.issueDate) : null,
-          expiryDate: e.expiryDate ? new Date(e.expiryDate) : null,
-          visaFee: e.visaFee,
-          serviceCharge: e.serviceCharge ?? 0,
-          confirmationNo: e.confirmationNo,
-        })),
+    const booking = await prisma.visaBooking.create({
+      data: {
+        agencyId: session.user.agencyId,
+        agentName: body.agentName,
+        guestName: body.guestName,
+        nationality: body.nationality,
+        mobileNo: body.mobileNo,
+        referenceNo: body.referenceNo || null,
+        currency: body.currency || "PKR",
+        discount: parseFloat(body.discount) || 0,
+        vatPercent: parseFloat(body.vatPercent) || 0,
+        paymentType: body.paymentType || null,
+        note: body.note || null,
+        entries: {
+          create: entriesList.map((row: any) => ({
+            visaCategory: row.visaCategory,
+            applicantName: row.applicantName,
+            passportNumber: row.passportNumber,
+            processingType: row.processingType || null,
+            submissionDate: row.submissionDate ? new Date(row.submissionDate) : null,
+            expiryDate: row.expiryDate ? new Date(row.expiryDate) : null,
+            buyingCost: parseFloat(row.buyingCost) || 0,
+            sellingPrice: parseFloat(row.sellingPrice) || 0,
+          })),
+        },
       },
-    },
-    include: { entries: true },
-  });
+      include: { entries: true },
+    });
 
-  return NextResponse.json(booking, { status: 201 });
+    return NextResponse.json(booking, { status: 201 });
+  } catch (error: any) {
+    console.error("Error in visa-bookings POST route:", error);
+    return NextResponse.json(
+      { error: error.message || "Internal Server Error" }, 
+      { status: 500 }
+    );
+  }
 }

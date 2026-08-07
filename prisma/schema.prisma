@@ -8,21 +8,13 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
-// ------------------------------------------------------------
-// AGENCY = one tenant. Every agency gets a unique `slug`, which
-// is what shows up in the public URL, e.g. yoursite.com/travelcraft
-// ------------------------------------------------------------
 model Agency {
-  id        String   @id @default(cuid())
-  slug      String   @unique // "travelcraft" - used in the public URL and login
-  name      String // "Travel Craft Tours" - display name
-  isActive  Boolean  @default(true) // your on/off switch for non-paying agencies
-  createdAt DateTime @default(now())
+  id            String   @id @default(cuid())
+  slug          String   @unique
+  name          String
+  isActive      Boolean  @default(true)
+  createdAt     DateTime @default(now())
 
-  users              User[]
-  travelers          Traveler[]
-  packages           Package[]
-  inquiries          Inquiry[]
   bankAccountName    String?
   bankName           String?
   bankAccountNo      String?
@@ -32,19 +24,16 @@ model Agency {
   noShowPolicy       String?
   importantContact   String?
 
+  users             User[]
+  packageBookings   PackageBooking[]
+  packages          Package[]
+  inquiries         Inquiry[]
   hotelBookings     HotelBooking[]
   transportBookings TransportBooking[]
-  
-  flightBookings FlightBooking[]
-  visaBookings   VisaBooking[]
+  flightBookings    FlightBooking[]
+  visaBookings      VisaBooking[]
 }
 
-// ------------------------------------------------------------
-// USER = one login. Two kinds:
-// - Super Admin: isSuperAdmin = true, agencyId = null (you)
-// - Agency login: isSuperAdmin = false, agencyId = set (one shared
-//   login per agency - no separate owner/staff roles, as you wanted)
-// ------------------------------------------------------------
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -53,16 +42,6 @@ model User {
   agencyId     String?
   agency       Agency?  @relation(fields: [agencyId], references: [id])
   createdAt    DateTime @default(now())
-}
-
-model Traveler {
-  id          String   @id @default(cuid())
-  agencyId    String
-  agency      Agency   @relation(fields: [agencyId], references: [id])
-  name        String
-  peopleCount Int      @default(1)
-  price       Float
-  createdAt   DateTime @default(now())
 }
 
 model Package {
@@ -87,179 +66,236 @@ model Inquiry {
   createdAt   DateTime @default(now())
 }
 
-model HotelBooking {
-  id       String @id @default(cuid())
-  agencyId String
-  agency   Agency @relation(fields: [agencyId], references: [id])
+// ============================================================
+// FULL PACKAGE BOOKING — the combined wizard (roadmap item 6)
+// One global header + footer. Section checkboxes decide which
+// entry types get rows. Each entry type below can belong to
+// EITHER a standalone booking OR a PackageBooking (never both).
+// ============================================================
+model PackageBooking {
+  id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
 
+  // --- Global Header (own copy) ---
   agentName   String
-  agentNo     String?
-  nationality String
   guestName   String
-  contactName String?
-  mobileNo    String?
-  clientRefNo String?
-  groupNo     String?
-  localRefNo  String?
-  vatNumber   String?
-  optionDate  DateTime?
+  nationality String
+  mobileNo    String
+  referenceNo String?
+  currency    String   @default("PKR")
 
-  totalAmount Float
-  subAmount   Float
-  createdAt   DateTime @default(now())
+  // --- Section toggles ---
+  includeHotels     Boolean @default(false)
+  includeTransports Boolean @default(false)
+  includeFlights    Boolean @default(false)
+  includeVisas      Boolean @default(false)
 
-  hotels HotelBookingEntry[]
+  // --- Unified Pricing & Profit Module inputs ---
+  // (gross totals, tax amount, net total, and profit are all
+  // calculated from the line items below at read/render time —
+  // never stored)
+  discount    Float    @default(0)
+  vatPercent  Float    @default(0)
+  paymentType String?
+  note        String?
+
+  createdAt DateTime @default(now())
+
+  hotels            HotelBookingEntry[]
+  transportSegments TransportSegment[]
+  flightSegments    FlightSegment[]
+  visaEntries       VisaEntry[]
+}
+
+// ============================================================
+// HOTEL BOOKING
+// ============================================================
+model HotelBooking {
+  id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
+  
+
+  // --- Global Header (own copy) ---
+  agentName   String
+  guestName   String
+  nationality String
+  mobileNo    String
+  referenceNo String?
+  currency    String   @default("PKR")
+
+  // --- Pricing & Profit Module inputs ---
+  discount    Float    @default(0)
+  vatPercent  Float    @default(0)
+  paymentType String?
+  note        String?
+
+  createdAt DateTime @default(now())
+  hotels    HotelBookingEntry[]
 }
 
 model HotelBookingEntry {
-  id             String       @id @default(cuid())
-  hotelBookingId String
-  booking        HotelBooking @relation(fields: [hotelBookingId], references: [id], onDelete: Cascade)
+  id             String   @id @default(cuid())
+
+  hotelBookingId String?
+  hotelBooking   HotelBooking?   @relation(fields: [hotelBookingId], references: [id], onDelete: Cascade)
+  packageBookingId String?
+  packageBooking PackageBooking? @relation(fields: [packageBookingId], references: [id], onDelete: Cascade)
 
   hotelName      String
   city           String
-  roomType       String
+  roomType       String    // Single, Double, Triple, Quad, Quint Suite, Family Room
   checkIn        DateTime
   checkOut       DateTime
-  rooms          Int      @default(1)
-  adults         Int      @default(1)
-  children       Int      @default(0)
-  meals          String?
-  dayRate        Float
-  mlRate         Float    @default(0)
+  rooms          Int       @default(1)
+  adults         Int       @default(1)
+  children       Int       @default(0)
+  infants        Int       @default(0)
+  mealPlan       String?   // RO, BB, HB, FB
   confirmationNo String?
-  // nights and roomAmount are CALCULATED on screen/PDF, not stored -
-  // same reasoning as before: avoids stale data if dates change later
+
+  buyingCostPerNight  Float
+  sellingPricePerNight Float
+  // nights & line totals are CALCULATED on screen/PDF, never stored
 }
 
+// ============================================================
+// TRANSPORT BOOKING
+// ============================================================
 model TransportBooking {
-  id       String @id @default(cuid())
-  agencyId String
-  agency   Agency @relation(fields: [agencyId], references: [id])
+  id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
 
-  agentName     String
-  agentNo       String?
-  nationality   String
-  guestName     String
-  contactName   String?
-  mobileNo      String?
-  clientRefNo   String?
-  groupNo       String?
-  localRefNo    String?
-  reservationNo String?
-  paymentType   String?
+  // --- Global Header (own copy) ---
+  agentName   String
+  guestName   String
+  nationality String
+  mobileNo    String
+  referenceNo String?
+  currency    String   @default("PKR")
 
-  surcharge  Float    @default(0)
-  discount   Float    @default(0)
-  vatPercent Float    @default(0)
-  createdAt  DateTime @default(now())
+  // --- Pricing & Profit Module inputs ---
+  discount    Float    @default(0)
+  vatPercent  Float    @default(0)
+  paymentType String?
+  note        String?
 
-  segments TransportSegment[]
+  createdAt DateTime @default(now())
+  segments  TransportSegment[]
 }
 
 model TransportSegment {
-  id                 String           @id @default(cuid())
-  transportBookingId String
-  booking            TransportBooking @relation(fields: [transportBookingId], references: [id], onDelete: Cascade)
+  id                  String   @id @default(cuid())
 
-  date    DateTime
-  time    String
-  fromLoc String
-  toLoc   String
-  vehicle String
-  qty     Int      @default(1)
-  adults  Int      @default(1)
-  mlRate  Float    @default(0)
-  rate    Float
-  // total (qty × rate) is calculated, not stored
+  transportBookingId  String?
+  booking             TransportBooking? @relation(fields: [transportBookingId], references: [id], onDelete: Cascade)
+  packageBookingId    String?
+  packageBooking      PackageBooking?   @relation(fields: [packageBookingId], references: [id], onDelete: Cascade)
+
+  vehicle      String   // Sedan, SUV, Minivan, Coach, Luxury Bus, Train Ticket
+  sector       String   // e.g. "Jeddah to Makkah"
+  pickupDate   DateTime
+  pickupTime   String
+  qty          Int      @default(1)
+
+  buyingCost   Float    // Total Buying Cost for this segment
+  sellingPrice Float    // Total Selling Price for this segment
 }
 
-
+// ============================================================
+// FLIGHT BOOKING
+// ============================================================
 model FlightBooking {
-  id              String   @id @default(cuid())
-  agencyId        String
-  agency          Agency   @relation(fields: [agencyId], references: [id])
+  id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
 
-  agentName       String
-  agentNo         String?
-  nationality     String
-  guestName       String
-  contactName     String?
-  mobileNo        String?
-  clientRefNo     String?
-  groupNo         String?
-  localRefNo      String?
-  reservationNo   String?
-  reservationDate DateTime?
-  username        String?
-  paymentType     String?
+  // --- Global Header (own copy) ---
+  agentName   String
+  guestName   String
+  nationality String
+  mobileNo    String
+  referenceNo String?
+  currency    String   @default("PKR")
 
-  surcharge       Float    @default(0)
-  discount        Float    @default(0)
-  vatPercent      Float    @default(0)
-  specialRequirements String?
-  note            String?
-  createdAt       DateTime @default(now())
+  // --- Pricing & Profit Module inputs ---
+  discount    Float    @default(0)
+  vatPercent  Float    @default(0)
+  paymentType String?
+  note        String?
 
-  segments        FlightSegment[]
+  createdAt DateTime @default(now())
+  segments  FlightSegment[]
 }
 
 model FlightSegment {
-  id              String        @id @default(cuid())
-  flightBookingId String
-  booking         FlightBooking @relation(fields: [flightBookingId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
 
-  date          DateTime
-  airline       String
-  flightNo      String
-  pnr           String?
-  fromAirport   String
-  toAirport     String
-  departureTime String?
-  arrivalTime   String?
-  travelClass   String?
-  adults        Int      @default(1)
-  children      Int      @default(0)
-  infants       Int      @default(0)
-  baggage       String?
-  rate          Float
-  // total (per segment) calculated, not stored — same rule as Hotel/Transport
+  flightBookingId   String?
+  booking           FlightBooking?  @relation(fields: [flightBookingId], references: [id], onDelete: Cascade)
+  packageBookingId  String?
+  packageBooking    PackageBooking? @relation(fields: [packageBookingId], references: [id], onDelete: Cascade)
+
+  airline           String
+  flightNo          String
+  pnr               String?
+  departureAirport  String
+  arrivalAirport    String
+  departureDateTime DateTime
+  arrivalDateTime   DateTime
+  travelClass       String?  // Economy, Premium Economy, Business, First Class
+  adults            Int      @default(1)
+  children          Int      @default(0)
+  infants           Int      @default(0)
+  baggage           String?
+
+  buyingCost   Float   // Total Buying Cost for this leg
+  sellingPrice Float   // Total Selling Price for this leg
 }
 
+// ============================================================
+// VISA BOOKING
+// ============================================================
 model VisaBooking {
-  id            String   @id @default(cuid())
-  agencyId      String
-  agency        Agency   @relation(fields: [agencyId], references: [id])
+  id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
 
-  agentName     String
-  agentNo       String?
-  nationality   String
-  guestName     String
-  contactName   String?
-  mobileNo      String?
-  clientRefNo   String?
-  groupNo       String?
-  localRefNo    String?
-  reservationNo String?
+  // --- Global Header (own copy) ---
+  agentName   String
+  guestName   String
+  nationality String
+  mobileNo    String
+  referenceNo String?
+  currency    String   @default("PKR")
 
-  totalAmount   Float
-  subAmount     Float
-  createdAt     DateTime @default(now())
+  // --- Pricing & Profit Module inputs ---
+  discount    Float    @default(0)
+  vatPercent  Float    @default(0)
+  paymentType String?
+  note        String?
 
-  entries       VisaEntry[]
+  createdAt DateTime @default(now())
+  entries   VisaEntry[]
 }
 
 model VisaEntry {
-  id            String      @id @default(cuid())
-  visaBookingId String
-  booking       VisaBooking @relation(fields: [visaBookingId], references: [id], onDelete: Cascade)
+  id                String   @id @default(cuid())
 
+  visaBookingId     String?
+  booking           VisaBooking?    @relation(fields: [visaBookingId], references: [id], onDelete: Cascade)
+  packageBookingId  String?
+  packageBooking    PackageBooking? @relation(fields: [packageBookingId], references: [id], onDelete: Cascade)
+
+  visaCategory    String   // e.g. Saudi Umrah, UK Tourist, Schengen Business
   applicantName   String
-  visaType        String   // e.g. country/category — Umrah Visa, Tourist Visa Saudi, etc.
-  processingType  String?  // e.g. Normal / Urgent
-  issueDate       DateTime?
+  passportNumber  String
+  processingType  String?  // Normal, Urgent, Express
+  submissionDate  DateTime?
   expiryDate      DateTime?
-  visaFee         Float
-  serviceCharge   Float    @default(0)
-  confirmationNo  String?
+
+  buyingCost   Float
+  sellingPrice Float
 }
