@@ -3,7 +3,7 @@
 import { motion } from "framer-motion";
 import { useAgencyTheme } from "@/src/hooks/useAgencyTheme";
 
-export function HeroSection() {
+export function HeroCarousel() {
   const { primaryColor, agencyName } = useAgencyTheme();
   const displayName = agencyName || "Our Agency";
 
