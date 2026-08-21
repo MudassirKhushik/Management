@@ -8,6 +8,7 @@ type Agency = {
   name: string;
   slug: string;
   isActive: boolean;
+  publicSiteEnabled: boolean;
   users: { email: string }[];
 };
 
@@ -35,8 +36,17 @@ export default function AdminAgenciesPage() {
     loadAgencies();
   }
 
+  async function togglePublicSite(id: string, current: boolean) {
+    await fetch(`/api/admin/agencies/${id}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ publicSiteEnabled: !current }),
+    });
+    loadAgencies();
+  }
+
   return (
-    <div className="max-w-2xl mx-auto p-6">
+    <div className="max-w-3xl mx-auto p-6">
       <div className="flex justify-between items-center mb-4">
         <h1 className="text-xl font-semibold">Agencies</h1>
         <Link href="/admin/add" className="bg-black text-white px-4 py-2 rounded text-sm">
@@ -55,8 +65,9 @@ export default function AdminAgenciesPage() {
               <th className="py-2">Name</th>
               <th className="py-2">Slug</th>
               <th className="py-2">Login Email</th>
-              <th className="py-2">Status</th>
-              <th className="py-2">Action</th>
+              <th className="py-2">Account</th>
+              <th className="py-2">Public Site</th>
+              <th className="py-2">Actions</th>
             </tr>
           </thead>
           <tbody>
@@ -71,11 +82,22 @@ export default function AdminAgenciesPage() {
                   </span>
                 </td>
                 <td className="py-2">
+                  <span className={a.publicSiteEnabled ? "text-green-600" : "text-gray-400"}>
+                    {a.publicSiteEnabled ? "On" : "Off"}
+                  </span>
+                </td>
+                <td className="py-2 space-x-3">
                   <button
                     onClick={() => toggleActive(a.id, a.isActive)}
                     className="text-blue-600 hover:underline"
                   >
                     {a.isActive ? "Deactivate" : "Activate"}
+                  </button>
+                  <button
+                    onClick={() => togglePublicSite(a.id, a.publicSiteEnabled)}
+                    className="text-blue-600 hover:underline"
+                  >
+                    {a.publicSiteEnabled ? "Disable Site" : "Enable Site"}
                   </button>
                 </td>
               </tr>

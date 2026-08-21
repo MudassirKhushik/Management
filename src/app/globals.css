@@ -2,16 +2,57 @@
 @import "tailwindcss";
 
 @theme {
-  --color-tct-black: #121212;
-  --color-tct-red: #e74c3c;
-  /* --color-tct-red: #D2232A; */
-  --color-tct-cream: #FAF7F2;
-  --color-tct-gray: #6B6B6B;
-
+  --color-tct-black: #0E0E0E;
+  --color-tct-surface: #1C1C1C;
+  --color-tct-red: #D2232A;
+  --color-tct-cream: #EDEAE3;
+  --color-tct-gray: #7C7C7C;
   --font-display: "Big Shoulders Display", sans-serif;
   --font-sans: "Inter", sans-serif;
 }
 
 body {
   font-family: var(--font-sans);
+}
+
+/*
+  Every booking form across the portal uses the same bare
+  className="border p-2 w-full" pattern with no radius or focus state, and
+  Tailwind's preflight reset makes a bare `border` render in near-black
+  (currentColor) — that's the actual cause of the "bad input fields" look,
+  not a per-file styling gap. Fixing it once here upgrades every existing
+  form automatically: softer border color, real radius, a visible brand-red
+  focus ring, and smooth transitions — without editing every file.
+*/
+@layer base {
+  input:not([type="checkbox"]):not([type="radio"]):not([type="color"]),
+  select,
+  textarea {
+    border-color: #DDD9D0 !important;
+    border-radius: 8px !important;
+    padding: 0.6rem 0.75rem !important;
+    transition: border-color 150ms ease, box-shadow 150ms ease;
+    outline: none;
+  }
+
+  input:not([type="checkbox"]):not([type="radio"]):focus,
+  select:focus,
+  textarea:focus {
+    border-color: var(--color-tct-red) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-tct-red) 15%, transparent);
+  }
+
+  label {
+    font-weight: 600;
+    letter-spacing: 0.02em;
+  }
+
+  table {
+    border-collapse: collapse;
+  }
+
+  th {
+    text-align: left;
+    background-color: #FAF9F6;
+  }
 }

@@ -1,7 +1,7 @@
 // src/app/api/admin/agencies/[id]/route.ts
 import { prisma } from "@/src/lib/prisma";
 import { NextResponse } from "next/server";
-import { auth } from "@/auth";
+import { auth } from "../../../../../auth";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
@@ -13,7 +13,7 @@ async function requireSuperAdmin() {
   return session;
 }
 
-// PUT = edit an existing agency's details, AND/OR toggle isActive
+// PUT = edit an existing agency's details, and/or toggle isActive / publicSiteEnabled
 export async function PUT(req: Request, { params }: RouteParams) {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -24,16 +24,18 @@ export async function PUT(req: Request, { params }: RouteParams) {
   const updated = await prisma.agency.update({
     where: { id },
     data: {
-      // only set fields that were actually sent — the Admin table's Activate/Deactivate
-      // button only sends { isActive }, and shouldn't blank out name/city/primaryColor
+      // only set fields that were actually sent — toggle buttons only send one
+      // field at a time and shouldn't blank out everything else
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.city !== undefined ? { city: body.city } : {}),
       ...(body.primaryColor !== undefined ? { primaryColor: body.primaryColor } : {}),
+      ...(body.logoUrl !== undefined ? { logoUrl: body.logoUrl } : {}),
       ...(typeof body.isActive === "boolean" ? { isActive: body.isActive } : {}),
+      ...(typeof body.publicSiteEnabled === "boolean"
+        ? { publicSiteEnabled: body.publicSiteEnabled }
+        : {}),
       // slug intentionally NOT editable here — changing it breaks existing
       // public links (yourdomain.com/oldslug) that may already be shared.
-      // If you genuinely need slug changes, that should be a separate,
-      // deliberate action with a warning, not a normal edit-form field.
     },
   });
 
@@ -52,7 +54,6 @@ export async function DELETE(req: Request, { params }: RouteParams) {
   ]);
 
   if (bookingCounts > 0) {
-    // Has real history — don't hard-delete client data. Deactivate instead.
     const agency = await prisma.agency.update({
       where: { id },
       data: { isActive: false },
@@ -60,7 +61,6 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     return NextResponse.json({ mode: "deactivated", agency });
   }
 
-  // No bookings at all yet — safe to actually remove.
   await prisma.user.deleteMany({ where: { agencyId: id } });
   await prisma.agency.delete({ where: { id } });
   return NextResponse.json({ mode: "deleted" });

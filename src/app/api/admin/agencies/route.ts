@@ -1,7 +1,8 @@
+// src/app/api/admin/agencies/route.ts
 import { prisma } from "@/src/lib/prisma";
 import { NextResponse } from "next/server";
+import { auth } from "@/auth";
 import bcrypt from "bcryptjs";
-import { auth } from "../../../../../auth";
 
 async function requireSuperAdmin() {
   const session = await auth();
@@ -9,43 +10,65 @@ async function requireSuperAdmin() {
   return session;
 }
 
-// GET = list every agency, with its one login's email attached
+// GET = list all agencies, with their one login user's email, for the Admin table
 export async function GET() {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const agencies = await prisma.agency.findMany({
-    orderBy: { createdAt: "desc" },
     include: { users: { select: { email: true } } },
+    orderBy: { createdAt: "desc" },
   });
+
   return NextResponse.json(agencies);
 }
 
-// POST = create a brand new agency + its one login, in one step
+// POST = create a new agency + its one login user, in a single form submission
 export async function POST(req: Request) {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
 
   const body = await req.json();
+
   const slug = (body.slug || "").trim().toLowerCase();
+  if (!slug) {
+    return NextResponse.json({ error: "Agency slug is required." }, { status: 400 });
+  }
 
   const existing = await prisma.agency.findUnique({ where: { slug } });
   if (existing) {
-    return NextResponse.json({ error: "That agency slug is already taken." }, { status: 400 });
+    return NextResponse.json({ error: "An agency with this slug already exists." }, { status: 400 });
   }
 
-  const agency = await prisma.agency.create({
-    data: { slug, name: body.name },
-  });
+  if (!body.email || !body.password) {
+    return NextResponse.json({ error: "Login email and password are required." }, { status: 400 });
+  }
 
-  await prisma.user.create({
-    data: {
-      email: body.email,
-      passwordHash: await bcrypt.hash(body.password, 10),
-      agencyId: agency.id,
-      isSuperAdmin: false,
-    },
-  });
+  const passwordHash = await bcrypt.hash(body.password, 10);
 
-  return NextResponse.json(agency);
+  try {
+    const agency = await prisma.agency.create({
+      data: {
+        slug,
+        name: body.name,
+        city: body.city || null,
+        // omit (not empty string) so Prisma's schema default "#D2232A" applies when unset
+        primaryColor: body.primaryColor || undefined,
+        publicSiteEnabled: typeof body.publicSiteEnabled === "boolean" ? body.publicSiteEnabled : true,
+        users: {
+          create: {
+            email: body.email,
+            passwordHash,
+            isSuperAdmin: false,
+          },
+        },
+      },
+      include: { users: true },
+    });
+
+    return NextResponse.json(agency);
+  } catch (err) {
+    console.error("Error creating agency:", err);
+    return NextResponse.json({ error: "Could not create agency." }, { status: 500 });
+  }
 }

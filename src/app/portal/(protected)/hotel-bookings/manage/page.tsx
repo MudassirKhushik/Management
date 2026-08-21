@@ -106,13 +106,29 @@ export default function ManageHotelBookingsPage() {
                 <td className="border p-2">{totals.grossSelling.toFixed(2)}</td>
                 <td className="border p-2">{totals.netTotal.toFixed(2)}</td>
                 <td className="border p-2">{totals.profit.toFixed(2)}</td>
-                <td className="border p-2">
+                <td className="border p-2 whitespace-nowrap">
                   <Link href={`/portal/hotel-bookings/${booking.id}/edit`} className="underline mr-2">
                     Edit
                   </Link>
-                  <button onClick={() => handleDelete(booking.id)} className="underline text-red-600">
+                  <button onClick={() => handleDelete(booking.id)} className="underline text-red-600 mr-2">
                     Delete
                   </button>
+                  <a
+                    href={`/api/hotel-bookings/${booking.id}/pdf?type=invoice`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline mr-2"
+                  >
+                    Invoice
+                  </a>
+                  <a
+                    href={`/api/hotel-bookings/${booking.id}/pdf?type=voucher`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="underline"
+                  >
+                    Voucher
+                  </a>
                 </td>
               </tr>
             );

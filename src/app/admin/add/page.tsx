@@ -7,6 +7,9 @@ export default function AddAgencyPage() {
   const router = useRouter();
   const [name, setName] = useState("");
   const [slug, setSlug] = useState("");
+  const [city, setCity] = useState("");
+  const [primaryColor, setPrimaryColor] = useState("#D2232A");
+  const [publicSiteEnabled, setPublicSiteEnabled] = useState(true);
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -20,7 +23,7 @@ export default function AddAgencyPage() {
     const res = await fetch("/api/admin/agencies", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, slug, email, password }),
+      body: JSON.stringify({ name, slug, city, primaryColor, publicSiteEnabled, email, password }),
     });
 
     setLoading(false);
@@ -60,6 +63,39 @@ export default function AddAgencyPage() {
             required
           />
         </div>
+        <div>
+          <label className="block text-sm mb-1">City (optional)</label>
+          <input
+            className="w-full border rounded px-3 py-2"
+            placeholder="Hyderabad"
+            value={city}
+            onChange={(e) => setCity(e.target.value)}
+          />
+        </div>
+        <div>
+          <label className="block text-sm mb-1">Brand Color (used on their public site)</label>
+          <div className="flex items-center gap-2">
+            <input
+              type="color"
+              className="h-10 w-14 border rounded cursor-pointer"
+              value={primaryColor}
+              onChange={(e) => setPrimaryColor(e.target.value)}
+            />
+            <input
+              className="flex-1 border rounded px-3 py-2 text-sm"
+              value={primaryColor}
+              onChange={(e) => setPrimaryColor(e.target.value)}
+            />
+          </div>
+        </div>
+        <label className="flex items-center gap-2 text-sm">
+          <input
+            type="checkbox"
+            checked={publicSiteEnabled}
+            onChange={(e) => setPublicSiteEnabled(e.target.checked)}
+          />
+          Enable public website for this agency
+        </label>
         <div>
           <label className="block text-sm mb-1">Login Email</label>
           <input

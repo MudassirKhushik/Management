@@ -1,26 +1,28 @@
 // src/app/[agencySlug]/page.tsx
-//
-// Brand tokens pulled from the TravelCraft Tours logo:
-//   --tct-black  #121212   wordmark black
-//   --tct-red    #D2232A   wordmark/accent red (verify against your source file, swap here if off)
-//   --tct-white  #FFFFFF
-//   --tct-cream  #FAF7F2   section background
-//   --tct-gray   #6B6B6B   secondary text
-//
-// Signature motif: the dotted line + "x" marker from the logo, reused as a section
-// divider AND as the visual language for empty states — Memories & Hype Wall use
-// dotted borders because they have no real content yet (no Media model built yet).
-// Packages Grid uses solid borders because it's real, live data.
-//
-// Packages Grid section keeps the EXACT original fetch logic/state/routes —
-// nothing about how packages load or link was changed, only styled.
 
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
 import { useParams } from "next/navigation";
 
+// Import config data
+import { SERVICES, PERKS, FAQS, CAROUSEL_SLIDES } from "@/src/config/agency-data";
+
+// Import UI components
+import { DottedDivider } from "@/src/components/ui/DottedDivider";
+import { AgencyThemeProvider } from "@/src/hooks/useAgencyTheme";
+
+// Import section components
+import { HeroCarousel } from "@/src/components/agency/HeroCarousel";
+import { PackagesSection } from "@/src/components/agency/PackagesSection";
+import { NetworkPerksSection } from "@/src/components/agency/NetworkPerksSection";
+import { AboutSection } from "@/src/components/agency/AboutSection";
+import { MemoriesSection } from "@/src/components/agency/MemoriesSection";
+import { HypeWallSection } from "@/src/components/agency/HypeWallSection";
+import { CTASection } from "@/src/components/agency/CTASection";
+import { FAQSection } from "@/src/components/agency/FAQSection";
+
+// Types
 type Package = {
   id: string;
   title: string;
@@ -28,421 +30,104 @@ type Package = {
   imageUrl: string | null;
 };
 
-const SERVICES = [
-  "Umrah Packages",
-  "Flight Bookings",
-  "Hotel Reservations",
-  "Visa Consultation",
-  "Honeymoon Packages",
-  "Group Tours",
-  "Pilgrimage",
-];
-
-const PERKS = [
-  { title: "Umrah Packages", body: "Guided pilgrimage packages with hotel and transport handled end to end." },
-  { title: "Flight Bookings", body: "Domestic and international fares, ticketed through our verified network." },
-  { title: "Hotel Reservations", body: "Vetted stays near the Haramain and at every stop on your itinerary." },
-  { title: "Visa Consultation", body: "Document checklists and application support, explained in plain terms." },
-  { title: "Honeymoon Packages", body: "Private itineraries built around the two of you, not a fixed template." },
-  { title: "Group Tours", body: "Coordinated travel for families, jamaats, and corporate groups alike." },
-];
-
-const FAQS = [
-  {
-    q: "What documents do I need for an Umrah visa?",
-    a: "A passport valid for at least six months, a recent passport-size photo, and a vaccination certificate where required. We review your documents before submission so nothing gets rejected at the embassy.",
-  },
-  {
-    q: "How far in advance should I book a Hajj or Umrah package?",
-    a: "For Hajj, 4–6 months ahead is safest given quota timelines. Umrah is more flexible, but flights and Haram-adjacent hotels fill up fastest during Ramadan — book 6–8 weeks out if you can.",
-  },
-  {
-    q: "Can you arrange group travel for a jamaat or family?",
-    a: "Yes — group bookings get a single point of contact, consolidated hotel blocks, and group-rate transport. Tell us your headcount and we'll put a plan together.",
-  },
-  {
-    q: "Do you handle payment in installments?",
-    a: "Payment is by bank transfer, and we can discuss a staged schedule for larger packages — ask your agent when you inquire.",
-  },
-];
-
-function Reveal({ children, className = "" }: { children: React.ReactNode; className?: string }) {
-  const [visible, setVisible] = useState(false);
-  const ref = (node: HTMLDivElement | null) => {
-    if (!node || visible) return;
-    const obs = new IntersectionObserver(
-      ([entry]) => {
-        if (entry.isIntersecting) {
-          setVisible(true);
-          obs.disconnect();
-        }
-      },
-      { threshold: 0.15 }
-    );
-    obs.observe(node);
-  };
-  return (
-    <div
-      ref={ref}
-      className={`${className} transition-all duration-700 ease-out ${
-        visible ? "opacity-100 translate-y-0" : "opacity-0 translate-y-6"
-      }`}
-    >
-      {children}
-    </div>
-  );
-}
-
-function DottedDivider() {
-  return (
-    <div className="flex items-center justify-center gap-2 py-10" aria-hidden="true">
-      <span className="h-px w-16 border-t-2 border-dotted" style={{ borderColor: "var(--tct-red)" }} />
-      <span className="text-[var(--tct-red)] text-lg leading-none">✕</span>
-      <span className="h-px w-16 border-t-2 border-dotted" style={{ borderColor: "var(--tct-red)" }} />
-    </div>
-  );
-}
-
-function Eyebrow({ children }: { children: React.ReactNode }) {
-  return (
-    <p
-      className="text-xs tracking-[0.25em] uppercase font-semibold mb-3"
-      style={{ color: "var(--tct-red)" }}
-    >
-      {children}
-    </p>
-  );
-}
+type AgencyInfo = {
+  name: string;
+  slug: string;
+  city: string | null;
+  primaryColor: string | null;
+  logoUrl: string | null;
+};
 
 export default function HomePage() {
   const params = useParams();
   const agencySlug = params.agencySlug as string;
 
   const [packages, setPackages] = useState<Package[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [loadingPackages, setLoadingPackages] = useState(true);
+  const [agency, setAgency] = useState<AgencyInfo | null>(null);
 
+  // Fetch packages
   useEffect(() => {
     async function loadPackages() {
-      const res = await fetch(`/api/packages?agencySlug=${agencySlug}`);
-      const data = await res.json();
-      setPackages(data);
-      setLoading(false);
+      try {
+        const res = await fetch(`/api/packages?agencySlug=${agencySlug}`);
+        const data = await res.json();
+        setPackages(data);
+      } catch (error) {
+        console.error("Failed to load packages:", error);
+      } finally {
+        setLoadingPackages(false);
+      }
     }
     loadPackages();
   }, [agencySlug]);
 
-  const displayName = agencySlug
-    ? agencySlug.charAt(0).toUpperCase() + agencySlug.slice(1)
-    : "Travel Craft Tours";
+  // Fetch agency info
+  useEffect(() => {
+    async function loadAgency() {
+      try {
+        const res = await fetch(`/api/agencies/public?agencySlug=${agencySlug}`);
+        if (!res.ok) return;
+        const data = await res.json();
+        setAgency(data);
+      } catch (error) {
+        console.error("Could not load agency info:", error);
+      }
+    }
+    loadAgency();
+  }, [agencySlug]);
 
   return (
-    <main style={{ backgroundColor: "var(--tct-white)", color: "var(--tct-black)" }}>
-      <style jsx global>{`
-        @import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Inter:wght@400;500;600;700&display=swap");
-        :root {
-          --tct-black: #121212;
-          --tct-red: #d2232a;
-          --tct-white: #ffffff;
-          --tct-cream: #faf7f2;
-          --tct-gray: #6b6b6b;
-        }
-        body {
-          font-family: "Inter", sans-serif;
-        }
-        .font-display {
-          font-family: "Big Shoulders Display", sans-serif;
-        }
-      `}</style>
+    <AgencyThemeProvider agency={agency}>
+      <main style={{ backgroundColor: "var(--tct-white)", color: "var(--tct-black)" }}>
+        {/* Global Styles */}
+        <style jsx global>{`
+          @import url("https://fonts.googleapis.com/css2?family=Big+Shoulders+Display:wght@700;900&family=Inter:wght@400;500;600;700&display=swap");
+          :root {
+            --tct-black: #121212;
+            --tct-red: #d2232a;
+            --tct-white: #ffffff;
+            --tct-cream: #faf7f2;
+            --tct-gray: #6b6b6b;
+          }
+          body {
+            font-family: "Inter", sans-serif;
+          }
+          .font-display {
+            font-family: "Big Shoulders Display", sans-serif;
+          }
+        `}</style>
 
-      {/* ================= HERO ================= */}
-      <section className="relative overflow-hidden border-b-4" style={{ borderColor: "var(--tct-black)" }}>
-        {/* faint world-map watermark, echoing the logo's background map */}
-        <div
-          className="absolute inset-0 opacity-[0.06] pointer-events-none"
-          style={{
-            backgroundImage:
-              "radial-gradient(circle at 20% 30%, var(--tct-red) 2px, transparent 2px), radial-gradient(circle at 60% 60%, var(--tct-red) 2px, transparent 2px), radial-gradient(circle at 80% 20%, var(--tct-red) 2px, transparent 2px)",
-            backgroundSize: "40px 40px",
-          }}
-        />
-        <div
-          className="absolute top-0 right-0 w-2/3 h-3 md:h-4"
-          style={{ backgroundColor: "var(--tct-red)", clipPath: "polygon(15% 0, 100% 0, 100% 100%, 0 100%)" }}
+        {/* Section 1: Hero Carousel */}
+        <HeroCarousel agency={agency} slides={CAROUSEL_SLIDES} services={SERVICES} />
+
+        {/* Section 2: Packages */}
+        <PackagesSection 
+          packages={packages} 
+          loading={loadingPackages} 
+          agencySlug={agencySlug} 
         />
 
-        <div className="relative max-w-6xl mx-auto px-6 pt-20 pb-16">
-          <Eyebrow>{SERVICES.join("  •  ")}</Eyebrow>
+        {/* Section 3: Network & Perks */}
+        <NetworkPerksSection perks={PERKS} />
 
-          <h1 className="font-display text-5xl md:text-7xl leading-[0.95] font-black uppercase mb-6">
-            <span style={{ color: "var(--tct-black)" }}>Travel</span>
-            <span style={{ color: "var(--tct-red)" }}>Craft</span>
-            <br />
-            <span className="text-2xl md:text-3xl tracking-wide" style={{ color: "var(--tct-gray)" }}>
-              Tours
-            </span>
-          </h1>
+        {/* Section 4: About */}
+        <AboutSection agency={agency} />
 
-          <div className="flex items-center gap-2 mb-8" aria-hidden="true">
-            <span className="h-px w-10 border-t-2 border-dotted" style={{ borderColor: "var(--tct-red)" }} />
-            <span className="text-sm" style={{ color: "var(--tct-red)" }}>✕</span>
-            <p className="uppercase text-sm tracking-[0.3em] font-semibold" style={{ color: "var(--tct-black)" }}>
-              Crafting Your Dream Trip
-            </p>
-          </div>
+        {/* Section 5: Memories */}
+        <MemoriesSection />
 
-          <p className="max-w-xl text-base md:text-lg mb-8" style={{ color: "var(--tct-gray)" }}>
-            {displayName} plans Hajj, Umrah, and general tours from Hyderabad, Pakistan —
-            flights, hotels, visas, and group travel, handled by people who've done it before.
-          </p>
+        {/* Section 6: Hype Wall */}
+        <HypeWallSection />
 
-          <a
-            href="#packages"
-            className="inline-block px-8 py-3 font-semibold uppercase tracking-wide text-sm text-white transition-transform hover:-translate-y-0.5"
-            style={{ backgroundColor: "var(--tct-red)" }}
-          >
-            View Packages
-          </a>
-        </div>
-      </section>
+        {/* Section 7: CTA */}
+        <CTASection />
 
-      {/* ================= PACKAGES GRID (live data — original logic unchanged) ================= */}
-      <section id="packages" className="max-w-6xl mx-auto px-6 py-20">
-        <Reveal>
-          <Eyebrow>Packages</Eyebrow>
-          <h2 className="font-display text-3xl md:text-4xl font-black uppercase mb-10">
-            Choose Your Journey
-          </h2>
-        </Reveal>
+        {/* Section 8: FAQ */}
+        <FAQSection faqs={FAQS} />
 
-        {loading ? (
-          <p style={{ color: "var(--tct-gray)" }}>Loading packages...</p>
-        ) : packages.length === 0 ? (
-          <div className="border-2 border-dotted p-10 text-center" style={{ borderColor: "var(--tct-red)" }}>
-            <p style={{ color: "var(--tct-gray)" }}>
-              No packages published yet. Add your first package from the portal to see it here.
-            </p>
-          </div>
-        ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {packages.map((pkg, i) => (
-              <Reveal key={pkg.id} className={`delay-[${Math.min(i, 3) * 75}ms]`}>
-                <div
-                  className="border-2 flex flex-col h-full transition-shadow hover:shadow-lg"
-                  style={{ borderColor: "var(--tct-black)" }}
-                >
-                  {pkg.imageUrl ? (
-                    // eslint-disable-next-line @next/next/no-img-element
-                    <img src={pkg.imageUrl} alt={pkg.title} className="w-full h-44 object-cover" />
-                  ) : (
-                    <div
-                      className="w-full h-44 flex items-center justify-center text-sm"
-                      style={{ backgroundColor: "var(--tct-cream)", color: "var(--tct-gray)" }}
-                    >
-                      No image
-                    </div>
-                  )}
-                  <div className="p-5 flex flex-col flex-1">
-                    <h3 className="font-display text-xl font-bold uppercase mb-2">{pkg.title}</h3>
-                    <p className="text-sm flex-1 line-clamp-3" style={{ color: "var(--tct-gray)" }}>
-                      {pkg.description}
-                    </p>
-                    <div className="flex gap-2 mt-5">
-                      <Link
-                        href={`/${agencySlug}/packages/${pkg.id}`}
-                        className="flex-1 text-center border-2 px-3 py-2 text-sm font-semibold uppercase tracking-wide"
-                        style={{ borderColor: "var(--tct-black)" }}
-                      >
-                        Details
-                      </Link>
-                      <Link
-                        href={`/${agencySlug}/book/${pkg.id}`}
-                        className="flex-1 text-center px-3 py-2 text-sm font-semibold uppercase tracking-wide text-white"
-                        style={{ backgroundColor: "var(--tct-red)" }}
-                      >
-                        Book Now
-                      </Link>
-                    </div>
-                  </div>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        )}
-      </section>
-
-      <DottedDivider />
-
-      {/* ================= NETWORK & PERKS ================= */}
-      <section className="py-4" style={{ backgroundColor: "var(--tct-cream)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-16">
-          <Reveal>
-            <Eyebrow>Network &amp; Perks</Eyebrow>
-            <h2 className="font-display text-3xl md:text-4xl font-black uppercase mb-10">
-              Everything Under One Roof
-            </h2>
-          </Reveal>
-          <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 gap-6">
-            {PERKS.map((perk, i) => (
-              <Reveal key={perk.title} className={`delay-[${Math.min(i, 5) * 60}ms]`}>
-                <div className="bg-white border-2 p-5 h-full" style={{ borderColor: "var(--tct-black)" }}>
-                  <p className="text-xs font-semibold uppercase tracking-wide mb-2" style={{ color: "var(--tct-red)" }}>
-                    {String(i + 1).padStart(2, "0")}
-                  </p>
-                  <h3 className="font-display text-lg font-bold uppercase mb-2">{perk.title}</h3>
-                  <p className="text-sm" style={{ color: "var(--tct-gray)" }}>{perk.body}</p>
-                </div>
-              </Reveal>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================= ABOUT ================= */}
-      <section className="max-w-6xl mx-auto px-6 py-20 grid grid-cols-1 md:grid-cols-2 gap-12 items-center">
-        <Reveal>
-          <Eyebrow>About Us</Eyebrow>
-          <h2 className="font-display text-3xl md:text-4xl font-black uppercase mb-6">
-            Based in Hyderabad,<br />Trusted Nationwide
-          </h2>
-          <p className="mb-4" style={{ color: "var(--tct-gray)" }}>
-            {displayName} was built around one job: making Hajj, Umrah, and general tour
-            planning feel handled, not stressful. We work with a vetted network of hotels,
-            transport operators, and visa channels so every leg of your trip is booked by
-            someone who's arranged it before.
-          </p>
-          <p style={{ color: "var(--tct-gray)" }}>
-            Whether it's a single pilgrim's Umrah, a family honeymoon, or a group of forty on a
-            jamaat trip, the plan is built around your group — not a fixed template.
-          </p>
-        </Reveal>
-        <Reveal className="flex justify-center">
-          <div
-            className="w-full aspect-square max-w-sm border-2 flex items-center justify-center"
-            style={{ borderColor: "var(--tct-red)" }}
-          >
-            {/* Drop /public/logo.png into your project and this renders your real mark */}
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt={`${displayName} logo`} className="w-3/4" />
-          </div>
-        </Reveal>
-      </section>
-
-      <DottedDivider />
-
-      {/* ================= MEMORIES GALLERY (empty state — dotted, honest) ================= */}
-      <section className="max-w-6xl mx-auto px-6 py-20">
-        <Reveal>
-          <Eyebrow>Memories</Eyebrow>
-          <h2 className="font-display text-3xl md:text-4xl font-black uppercase mb-10">
-            From the Road
-          </h2>
-        </Reveal>
-        <div className="grid grid-cols-2 md:grid-cols-4 gap-4">
-          {[1, 2, 3, 4].map((n) => (
-            <div
-              key={n}
-              className="aspect-square border-2 border-dotted flex items-center justify-center text-xs uppercase tracking-wide text-center px-3"
-              style={{ borderColor: "var(--tct-red)", color: "var(--tct-gray)" }}
-            >
-              Photo coming soon
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ================= HYPE WALL (empty state — dotted, honest) ================= */}
-      <section className="py-4" style={{ backgroundColor: "var(--tct-cream)" }}>
-        <div className="max-w-6xl mx-auto px-6 py-20">
-          <Reveal>
-            <Eyebrow>Hype Wall</Eyebrow>
-            <h2 className="font-display text-3xl md:text-4xl font-black uppercase mb-10">
-              What Travelers Say
-            </h2>
-          </Reveal>
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
-            {[1, 2, 3].map((n) => (
-              <div
-                key={n}
-                className="bg-white border-2 border-dotted p-6"
-                style={{ borderColor: "var(--tct-red)" }}
-              >
-                <p className="text-sm" style={{ color: "var(--tct-gray)" }}>
-                  Real traveler reviews will appear here once you start collecting them.
-                </p>
-              </div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      {/* ================= CTA & BOOKING ================= */}
-      <section className="py-20 text-center px-6" style={{ backgroundColor: "var(--tct-black)" }}>
-        <Reveal>
-          <h2 className="font-display text-3xl md:text-5xl font-black uppercase text-white mb-4">
-            Ready to Plan Your Trip?
-          </h2>
-          <p className="mb-8" style={{ color: "#cccccc" }}>
-            Pick a package above, or reach out directly and we'll build one around you.
-          </p>
-          <a
-            href="#packages"
-            className="inline-block px-8 py-3 font-semibold uppercase tracking-wide text-sm"
-            style={{ backgroundColor: "var(--tct-red)", color: "white" }}
-          >
-            Browse Packages
-          </a>
-        </Reveal>
-      </section>
-
-      {/* ================= FAQ ================= */}
-      <section className="max-w-3xl mx-auto px-6 py-20">
-        <Reveal>
-          <Eyebrow>FAQ</Eyebrow>
-          <h2 className="font-display text-3xl md:text-4xl font-black uppercase mb-10">
-            Good to Know
-          </h2>
-        </Reveal>
-        <div className="space-y-3">
-          {FAQS.map((item, i) => (
-            <div key={i} className="border-2" style={{ borderColor: "var(--tct-black)" }}>
-              <button
-                type="button"
-                className="w-full text-left px-5 py-4 flex justify-between items-center font-semibold"
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
-              >
-                <span>{item.q}</span>
-                <span style={{ color: "var(--tct-red)" }}>{openFaq === i ? "−" : "+"}</span>
-              </button>
-              {openFaq === i && (
-                <p className="px-5 pb-4 text-sm" style={{ color: "var(--tct-gray)" }}>
-                  {item.a}
-                </p>
-              )}
-            </div>
-          ))}
-        </div>
-      </section>
-
-      {/* ================= FOOTER ================= */}
-      <footer className="border-t-4 py-12 px-6" style={{ borderColor: "var(--tct-red)", backgroundColor: "var(--tct-black)" }}>
-        <div className="max-w-6xl mx-auto flex flex-col md:flex-row justify-between gap-8">
-          <div>
-            <h3 className="font-display text-2xl font-black uppercase text-white mb-2">
-              Travel<span style={{ color: "var(--tct-red)" }}>Craft</span> Tours
-            </h3>
-            <p className="text-sm" style={{ color: "#999999" }}>Crafting Your Dream Trip</p>
-          </div>
-          <div className="flex flex-wrap gap-x-8 gap-y-2 text-sm" style={{ color: "#cccccc" }}>
-            {SERVICES.map((s) => (
-              <span key={s}>{s}</span>
-            ))}
-          </div>
-        </div>
-        <p className="max-w-6xl mx-auto mt-8 pt-6 border-t text-xs" style={{ borderColor: "#333333", color: "#777777" }}>
-          © {new Date().getFullYear()} {displayName}. All rights reserved.
-        </p>
-      </footer>
-    </main>
+        {/* Section 9: Footer - Rendered by parent layout */}
+      </main>
+    </AgencyThemeProvider>
   );
 }
