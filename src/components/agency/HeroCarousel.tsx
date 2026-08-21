@@ -1,22 +1,9 @@
 // src/components/agency/HeroCarousel.tsx
-//
-// Redesigned: red is now used in exactly 3 places (accent bar, agency-name last
-// word, CTA button + active dot) instead of five, and service tags no longer get
-// a red-tinted background/border — neutral outline instead, so the brand color
-// reads as a sharp accent rather than a wash across the whole section.
-//
-// Fake per-slide marketing copy ("Sacred Journeys", "Global Travel", etc.) and the
-// random multi-hue gradient rotation (red/blue/purple/emerald/amber/indigo) were
-// removed — they had nothing to do with the actual agency and were the biggest
-// contributor to the "childish/templated" feel. If real carouselImages are passed
-// in, only the IMAGE rotates; the text content (agency name, tagline, CTA) stays
-// consistent across slides. If no images are provided at all, this renders a
-// single static hero with no dots/arrows — an honest state instead of faking a
-// carousel with nothing to show.
-
 "use client";
 
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
 import { splitName } from "@/src/lib/formatting";
 
 interface AgencyInfo {
@@ -28,7 +15,6 @@ interface AgencyInfo {
   carouselImages?: string[] | null;
 }
 
-// Updated interface to safely allow optional slides object structure coming from Next.js Page
 interface HeroCarouselProps {
   agency: AgencyInfo | null;
   services: string[];
@@ -47,18 +33,50 @@ interface HeroCarouselProps {
 export function HeroCarousel({ agency, services, carouselImages = [], slides = [] }: HeroCarouselProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
+  const heroRef = useRef<HTMLDivElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
 
   const primaryColor = agency?.primaryColor || "#D2232A";
   const displayName = agency?.name || "";
   const { lead: nameLead, last: nameLast } = splitName(displayName);
 
-  // Fallback fallback: prioritize explicit carouselImages, drop down to slide image keys if available
-  const parsedImages = carouselImages.length > 0 
-    ? carouselImages 
+  const parsedImages = carouselImages.length > 0
+    ? carouselImages
     : slides.map(s => s.image).filter((img): img is string => !!img);
 
   const hasRealImages = parsedImages.length > 0;
-  const images = hasRealImages ? parsedImages : [null]; // single "no image" slide
+  const images = hasRealImages ? parsedImages : [null];
+
+  useEffect(() => {
+    if (heroRef.current) {
+      gsap.fromTo(
+        heroRef.current,
+        { opacity: 0, scale: 1.05 },
+        {
+          opacity: 1,
+          scale: 1,
+          duration: 1.2,
+          ease: "power3.out",
+        }
+      );
+    }
+  }, []);
+
+  useEffect(() => {
+    if (textRef.current) {
+      gsap.fromTo(
+        textRef.current.children,
+        { y: 50, opacity: 0 },
+        {
+          y: 0,
+          opacity: 1,
+          duration: 0.8,
+          stagger: 0.15,
+          ease: "power3.out",
+        }
+      );
+    }
+  }, [currentSlide]);
 
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev + 1) % images.length);
@@ -90,119 +108,196 @@ export function HeroCarousel({ agency, services, carouselImages = [], slides = [
     return () => window.removeEventListener("keydown", handleKeyDown);
   }, [nextSlide, prevSlide, images.length]);
 
+  const slideVariants = {
+    enter: (direction: number) => ({
+      x: direction > 0 ? 300 : -300,
+      opacity: 0,
+      scale: 0.9,
+    }),
+    center: {
+      x: 0,
+      opacity: 1,
+      scale: 1,
+      transition: {
+        duration: 0.8,
+        ease: "easeOut",
+      },
+    },
+    exit: (direction: number) => ({
+      x: direction > 0 ? -300 : 300,
+      opacity: 0,
+      scale: 0.9,
+      transition: {
+        duration: 0.8,
+        ease: "easeIn",
+      },
+    }),
+  };
+
   return (
-    <section className="relative overflow-hidden h-[85vh] min-h-[560px] max-h-[760px] bg-tct-black">
-      {/* single brand accent bar — the ONLY full-width use of red */}
-      <div className="absolute top-0 left-0 w-full h-1 z-20" style={{ backgroundColor: primaryColor }} />
+    <section
+      ref={heroRef}
+      className="relative overflow-hidden h-[85vh] min-h-[560px] max-h-[760px] bg-tct-black"
+    >
+      <motion.div
+        className="absolute top-0 left-0 w-full h-1 z-20"
+        style={{ backgroundColor: primaryColor }}
+        initial={{ scaleX: 0 }}
+        animate={{ scaleX: 1 }}
+        transition={{ duration: 1, ease: "easeOut" }}
+      />
 
       <div className="relative w-full h-full">
-        {images.map((imageUrl, index) => (
-          <div
-            key={index}
-            className={`absolute inset-0 transition-opacity duration-1000 ease-in-out ${
-              index === currentSlide ? "opacity-100" : "opacity-0 pointer-events-none"
-            }`}
+        <AnimatePresence mode="wait">
+          <motion.div
+            key={currentSlide}
+            custom={1}
+            variants={slideVariants}
+            initial="enter"
+            animate="center"
+            exit="exit"
+            className="absolute inset-0"
           >
-            {imageUrl ? (
+            {images[currentSlide] ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img src={imageUrl} alt={displayName} className="absolute inset-0 w-full h-full object-cover" />
-                {/* one consistent dark overlay, not a rotating rainbow of gradients */}
-                <div className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/30" />
+                <img
+                  src={images[currentSlide]!}
+                  alt={displayName}
+                  className="absolute inset-0 w-full h-full object-cover"
+                />
+                <motion.div
+                  className="absolute inset-0 bg-gradient-to-t from-black/85 via-black/50 to-black/30"
+                  initial={{ opacity: 0 }}
+                  animate={{ opacity: 1 }}
+                  transition={{ duration: 0.8 }}
+                />
               </>
             ) : (
               <>
                 <div className="absolute inset-0 bg-tct-black" />
-                {/* single subtle red glow instead of a flat fill */}
-                <div
+                <motion.div
                   className="absolute inset-0"
                   style={{
                     background: `radial-gradient(ellipse at top left, ${primaryColor}22, transparent 60%)`,
                   }}
+                  initial={{ opacity: 0, scale: 1.2 }}
+                  animate={{ opacity: 1, scale: 1 }}
+                  transition={{ duration: 1.2, ease: "easeOut" }}
                 />
               </>
             )}
 
-            {/* faint dotted texture, echoes the logo's watermark — same on every slide */}
             <div
               className="absolute inset-0 opacity-[0.06] pointer-events-none"
               style={{
-                backgroundImage: "radial-gradient(circle at 1px 1px, white 1px, transparent 1px)",
+                backgroundImage: "radial-gradient(circle at 1px 1px, #ffffff 1px, transparent 1px)",
                 backgroundSize: "36px 36px",
               }}
             />
-          </div>
-        ))}
+          </motion.div>
+        </AnimatePresence>
 
-        {/* content — identical across every slide, only the background image changes */}
         <div className="relative z-20 h-full flex items-center">
           <div className="max-w-6xl mx-auto px-6 w-full">
-            <div className="max-w-2xl">
+            <motion.div
+              ref={textRef}
+              className="max-w-2xl"
+              key={currentSlide}
+            >
               {services.length > 0 && (
-                <p
+                <motion.p
                   className="text-xs tracking-[0.25em] uppercase font-semibold mb-4"
                   style={{ color: primaryColor }}
+                  initial={{ opacity: 0, y: 20 }}
+                  animate={{ opacity: 1, y: 0 }}
+                  transition={{ duration: 0.6, delay: 0.1 }}
                 >
                   {services.slice(0, 5).join("  •  ")}
-                </p>
+                </motion.p>
               )}
 
-              <h1 className="font-display text-5xl md:text-7xl font-black uppercase leading-[0.95] text-tct-cream mb-6">
+              <motion.h1
+                className="font-display text-5xl md:text-7xl font-black uppercase leading-[0.95] text-tct-cream mb-6"
+                initial={{ opacity: 0, y: 30 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.8, delay: 0.2 }}
+              >
                 {nameLead ? `${nameLead} ` : ""}
                 <span style={{ color: primaryColor }}>{nameLast}</span>
-              </h1>
+              </motion.h1>
 
-              <p className="text-base md:text-lg max-w-xl mb-8 leading-relaxed" style={{ color: "#c4c4c4" }}>
+              <motion.p
+                className="text-base md:text-lg max-w-xl mb-8 leading-relaxed"
+                style={{ color: "#c4c4c4" }}
+                initial={{ opacity: 0, y: 20 }}
+                animate={{ opacity: 1, y: 0 }}
+                transition={{ duration: 0.6, delay: 0.4 }}
+              >
                 {displayName} plans Hajj, Umrah, and general tours
                 {agency?.city ? ` from ${agency.city}` : ""} — flights, hotels, visas, and
                 group travel, handled by people who've done it before.
-              </p>
+              </motion.p>
 
-              <a
+              <motion.a
                 href="#packages"
                 className="inline-block px-8 py-3.5 font-semibold uppercase tracking-wide text-sm rounded transition-all duration-300 hover:-translate-y-0.5 hover:shadow-xl text-white"
                 style={{ backgroundColor: primaryColor }}
+                initial={{ opacity: 0, scale: 0.9 }}
+                animate={{ opacity: 1, scale: 1 }}
+                transition={{ duration: 0.6, delay: 0.6, ease: "easeOut" }}
+                whileHover={{ scale: 1.05 }}
+                whileTap={{ scale: 0.95 }}
               >
                 View Packages
-              </a>
-            </div>
+              </motion.a>
+            </motion.div>
           </div>
         </div>
       </div>
 
-      {/* dots + arrows only render when there's more than one real image to switch between */}
       {images.length > 1 && (
         <>
-          <div className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 flex gap-3">
+          <motion.div
+            className="absolute bottom-10 left-1/2 -translate-x-1/2 z-30 flex gap-3"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.6, delay: 0.8 }}
+          >
             {images.map((_, index) => (
-              <button
+              <motion.button
                 key={index}
                 onClick={() => goToSlide(index)}
-                className="transition-all duration-300 rounded-full focus:outline-none hover:scale-110"
+                className="transition-all duration-300 rounded-full focus:outline-none"
                 style={{
                   width: currentSlide === index ? "36px" : "10px",
                   height: "10px",
                   backgroundColor: currentSlide === index ? primaryColor : "rgba(255,255,255,0.35)",
                 }}
+                whileHover={{ scale: 1.2 }}
+                whileTap={{ scale: 0.9 }}
                 aria-label={`Go to slide ${index + 1}`}
               />
             ))}
-          </div>
+          </motion.div>
 
-          <button
+          <motion.button
             onClick={prevSlide}
-            className="absolute left-6 top-1/2 -translate-y-1/2 z-30 text-white/40 hover:text-white transition-all duration-300 text-3xl focus:outline-none hover:scale-125 w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10"
+            className="absolute left-6 top-1/2 -translate-y-1/2 z-30 text-white/40 hover:text-white transition-all duration-300 text-3xl focus:outline-none w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10"
+            whileHover={{ scale: 1.2, x: -5 }}
+            whileTap={{ scale: 0.9 }}
             aria-label="Previous slide"
           >
             ‹
-          </button>
-          <button
+          </motion.button>
+          <motion.button
             onClick={nextSlide}
-            className="absolute right-6 top-1/2 -translate-y-1/2 z-30 text-white/40 hover:text-white transition-all duration-300 text-3xl focus:outline-none hover:scale-125 w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10"
+            className="absolute right-6 top-1/2 -translate-y-1/2 z-30 text-white/40 hover:text-white transition-all duration-300 text-3xl focus:outline-none w-11 h-11 flex items-center justify-center rounded-full hover:bg-white/10"
+            whileHover={{ scale: 1.2, x: 5 }}
+            whileTap={{ scale: 0.9 }}
             aria-label="Next slide"
           >
             ›
-          </button>
+          </motion.button>
         </>
       )}
     </section>

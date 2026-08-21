@@ -1,10 +1,13 @@
 // src/components/agency/FAQSection.tsx
-
 "use client";
 
-import { useState } from "react";
-import { Reveal } from "@/src/components/ui/Reveal";
+import { useState, useEffect, useRef } from "react";
+import { motion, AnimatePresence } from "framer-motion";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
 import { useAgencyTheme } from "@/src/hooks/useAgencyTheme";
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface FAQ {
   q: string;
@@ -18,62 +21,159 @@ interface FAQSectionProps {
 export function FAQSection({ faqs }: FAQSectionProps) {
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const { primaryColor } = useAgencyTheme();
+  const faqRefs = useRef<(HTMLDivElement | null)[]>([]);
+
+  useEffect(() => {
+    faqRefs.current.forEach((ref, index) => {
+      if (ref) {
+        gsap.fromTo(
+          ref,
+          { opacity: 0, y: 30 },
+          {
+            opacity: 1,
+            y: 0,
+            duration: 0.5,
+            delay: index * 0.1,
+            scrollTrigger: {
+              trigger: ref,
+              start: "top 90%",
+              toggleActions: "play none none reverse",
+            },
+          }
+        );
+      }
+    });
+  }, [faqs]);
+
+  const containerVariants = {
+    hidden: { opacity: 0 },
+    visible: {
+      opacity: 1,
+      transition: {
+        staggerChildren: 0.08,
+        delayChildren: 0.2,
+      },
+    },
+  };
+
+  const itemVariants = {
+    hidden: { opacity: 0, y: 30 },
+    visible: {
+      opacity: 1,
+      y: 0,
+      transition: { duration: 0.5, ease: "easeOut" },
+    },
+  };
 
   return (
     <section id="faq" className="max-w-4xl mx-auto px-6 py-24">
-      <Reveal>
-        <div className="text-center max-w-3xl mx-auto mb-16">
-          <span 
+      <motion.div
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        variants={containerVariants}
+      >
+        <motion.div variants={itemVariants} className="text-center max-w-3xl mx-auto mb-16">
+          <motion.span
             className="text-sm font-semibold uppercase tracking-[0.3em]"
-            style={{ color: primaryColor }}
+            style={{ color: primaryColor || "#D2232A" }}
+            initial={{ opacity: 0 }}
+            whileInView={{ opacity: 1 }}
+            transition={{ duration: 0.6 }}
+            viewport={{ once: true }}
           >
             FAQ
-          </span>
-          <h2 className="font-display text-4xl md:text-5xl font-black mt-4 mb-6">
+          </motion.span>
+          <motion.h2
+            className="font-display text-4xl md:text-5xl font-black mt-4 mb-6"
+            variants={itemVariants}
+          >
             Good to Know
-          </h2>
-          <p className="text-gray-600 text-lg">
+          </motion.h2>
+          <motion.p
+            className="text-gray-600 text-lg"
+            variants={itemVariants}
+          >
             Quick answers to the most common questions about our services.
-          </p>
-        </div>
-      </Reveal>
+          </motion.p>
+        </motion.div>
+      </motion.div>
 
-      <div className="space-y-4">
+      <motion.div
+        className="space-y-4"
+        initial="hidden"
+        whileInView="visible"
+        viewport={{ once: true }}
+        variants={containerVariants}
+      >
         {faqs.map((item, i) => (
-          <Reveal key={i} delay={i * 75}>
-            <div 
-              className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
-              style={{ borderLeft: openFaq === i ? `4px solid ${primaryColor}` : "4px solid transparent" }}
+          <motion.div
+            key={i}
+            ref={(el) => { faqRefs.current[i] = el; }}
+            variants={itemVariants}
+            className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
+            style={{
+              borderLeft: openFaq === i ? `4px solid ${primaryColor || "#D2232A"}` : "4px solid transparent",
+            }}
+          >
+            <button
+              type="button"
+              className="w-full text-left px-6 py-5 flex justify-between items-center font-semibold text-lg transition-colors duration-300 hover:bg-gray-50"
+              onClick={() => setOpenFaq(openFaq === i ? null : i)}
             >
-              <button
-                type="button"
-                className="w-full text-left px-6 py-5 flex justify-between items-center font-semibold text-lg transition-colors duration-300 hover:bg-gray-50"
-                onClick={() => setOpenFaq(openFaq === i ? null : i)}
+              <motion.span
+                initial={{ opacity: 0, x: -10 }}
+                animate={{ opacity: 1, x: 0 }}
+                transition={{ delay: i * 0.05, duration: 0.3 }}
               >
-                <span>{item.q}</span>
-                <span 
-                  className="text-2xl font-light transition-transform duration-300 ml-4"
-                  style={{ 
-                    color: primaryColor,
-                    transform: openFaq === i ? "rotate(45deg)" : "rotate(0deg)"
+                {item.q}
+              </motion.span>
+              <motion.span
+                className="text-2xl font-light transition-transform duration-300 ml-4"
+                style={{ color: primaryColor || "#D2232A" }}
+                animate={{
+                  rotate: openFaq === i ? 45 : 0,
+                }}
+                transition={{ duration: 0.3 }}
+              >
+                +
+              </motion.span>
+            </button>
+            <AnimatePresence>
+              {openFaq === i && (
+                <motion.div
+                  initial={{ height: 0, opacity: 0 }}
+                  animate={{
+                    height: "auto",
+                    opacity: 1,
+                    transition: {
+                      height: { duration: 0.3, ease: "easeInOut" },
+                      opacity: { duration: 0.3, delay: 0.1 },
+                    },
+                  }}
+                  exit={{
+                    height: 0,
+                    opacity: 0,
+                    transition: {
+                      height: { duration: 0.3, ease: "easeInOut" },
+                      opacity: { duration: 0.2 },
+                    },
                   }}
                 >
-                  +
-                </span>
-              </button>
-              <div
-                className={`overflow-hidden transition-all duration-300 ease-in-out ${
-                  openFaq === i ? "max-h-96 opacity-100" : "max-h-0 opacity-0"
-                }`}
-              >
-                <p className="px-6 pb-6 text-gray-600 leading-relaxed">
-                  {item.a}
-                </p>
-              </div>
-            </div>
-          </Reveal>
+                  <motion.p
+                    className="px-6 pb-6 text-gray-600 leading-relaxed"
+                    initial={{ opacity: 0, y: -10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ duration: 0.3 }}
+                  >
+                    {item.a}
+                  </motion.p>
+                </motion.div>
+              )}
+            </AnimatePresence>
+          </motion.div>
         ))}
-      </div>
+      </motion.div>
     </section>
   );
 }
