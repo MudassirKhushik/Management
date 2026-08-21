@@ -1,8 +1,11 @@
 // src/components/agency/SiteHeader.tsx
+// Updated with Framer Motion
+
 "use client";
 
 import Link from "next/link";
 import { motion } from "framer-motion";
+import { useState, useEffect } from "react";
 
 type AgencyLite = {
   slug: string;
@@ -15,33 +18,33 @@ function BrandWordmark({ name }: { name: string }) {
   const words = name.trim().split(/\s+/);
   const last = words.pop() || name;
   return (
-    <motion.span
-      className="font-display text-xl font-black uppercase whitespace-nowrap"
-      initial={{ opacity: 0, x: -20 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ duration: 0.6, ease: "easeOut" }}
-    >
+    <span className="font-display text-xl font-black uppercase whitespace-nowrap">
       <span style={{ color: "var(--tct-black)" }}>
         {words.join(" ")}
         {words.length ? " " : ""}
       </span>
       <span style={{ color: "var(--tct-red)" }}>{last}</span>
-    </motion.span>
+    </span>
   );
 }
 
 export default function SiteHeader({ agency }: { agency: AgencyLite }) {
-  const navItems = [
-    { label: "Packages", href: `/${agency.slug}#packages` },
-    { label: "About", href: `/${agency.slug}#about` },
-    { label: "Gallery", href: `/${agency.slug}#memories` },
-    { label: "FAQ", href: `/${agency.slug}#faq` },
-  ];
+  const [isScrolled, setIsScrolled] = useState(false);
+
+  useEffect(() => {
+    const handleScroll = () => {
+      setIsScrolled(window.scrollY > 50);
+    };
+    window.addEventListener("scroll", handleScroll);
+    return () => window.removeEventListener("scroll", handleScroll);
+  }, []);
 
   return (
     <motion.header
-      className="sticky top-0 z-50 border-b-4 bg-white"
-      style={{ borderColor: "var(--tct-black)" }}
+      className={`sticky top-0 z-50 border-b-4 transition-shadow duration-300 ${
+        isScrolled ? "shadow-lg" : ""
+      }`}
+      style={{ borderColor: "var(--tct-black)", backgroundColor: "white" }}
       initial={{ y: -100 }}
       animate={{ y: 0 }}
       transition={{ duration: 0.5, ease: "easeOut" }}
@@ -53,34 +56,29 @@ export default function SiteHeader({ agency }: { agency: AgencyLite }) {
               src={agency.logoUrl}
               alt={agency.name}
               className="h-10 w-auto"
-              initial={{ opacity: 0, scale: 0.8 }}
-              animate={{ opacity: 1, scale: 1 }}
-              transition={{ duration: 0.5 }}
+              whileHover={{ scale: 1.05 }}
+              transition={{ duration: 0.2 }}
             />
           ) : (
-            <BrandWordmark name={agency.name} />
+            <motion.div whileHover={{ scale: 1.05 }} transition={{ duration: 0.2 }}>
+              <BrandWordmark name={agency.name} />
+            </motion.div>
           )}
         </Link>
 
         <nav className="flex gap-6 text-sm font-semibold uppercase tracking-wide">
-          {navItems.map((item, index) => (
+          {["Packages", "About", "Gallery", "FAQ"].map((item, index) => (
             <motion.div
-              key={item.label}
-              initial={{ opacity: 0, y: -20 }}
+              key={item}
+              initial={{ opacity: 0, y: -10 }}
               animate={{ opacity: 1, y: 0 }}
-              transition={{ duration: 0.4, delay: index * 0.05 }}
+              transition={{ delay: index * 0.1 }}
             >
               <Link
-                href={item.href}
-                className="relative hover:text-tct-red transition-colors duration-300"
+                href={`/${agency.slug}#${item.toLowerCase()}`}
+                className="hover:opacity-70 transition-opacity"
               >
-                {item.label}
-                <motion.span
-                  className="absolute -bottom-1 left-0 w-full h-0.5 bg-tct-red"
-                  initial={{ scaleX: 0 }}
-                  whileHover={{ scaleX: 1 }}
-                  transition={{ duration: 0.3 }}
-                />
+                {item}
               </Link>
             </motion.div>
           ))}

@@ -1,4 +1,5 @@
 // src/app/[agencySlug]/page.tsx
+// Updated with proper client component and animations
 
 "use client";
 
@@ -9,7 +10,6 @@ import { useParams } from "next/navigation";
 import { SERVICES, PERKS, FAQS, CAROUSEL_SLIDES } from "@/src/config/agency-data";
 
 // Import UI components
-import { DottedDivider } from "@/src/components/ui/DottedDivider";
 import { AgencyThemeProvider } from "@/src/hooks/useAgencyTheme";
 
 // Import section components
