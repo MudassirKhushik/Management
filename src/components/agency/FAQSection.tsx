@@ -1,179 +1,70 @@
-// src/components/agency/FAQSection.tsx
 "use client";
 
-import { useState, useEffect, useRef } from "react";
-import { motion, AnimatePresence } from "framer-motion";
-import gsap from "gsap";
-import { ScrollTrigger } from "gsap/ScrollTrigger";
+import { useState } from "react";
 import { useAgencyTheme } from "@/src/hooks/useAgencyTheme";
 
-gsap.registerPlugin(ScrollTrigger);
+const FAQS = [
+  {
+    q: "What documents do I need for an Umrah visa?",
+    a: "A passport valid for at least six months, a recent passport-size photo, and a vaccination certificate where required. We review your documents before submission so nothing gets rejected at the embassy.",
+  },
+  {
+    q: "How far in advance should I book a Hajj or Umrah package?",
+    a: "For Hajj, 4–6 months ahead is safest given quota timelines. Umrah is more flexible, but flights and Haram-adjacent hotels fill up fastest during Ramadan — book 6–8 weeks out if you can.",
+  },
+  {
+    q: "Can you arrange group travel for a jamaat or family?",
+    a: "Yes — group bookings get a single point of contact, consolidated hotel blocks, and group-rate transport. Tell us your headcount and we'll put a plan together.",
+  },
+  {
+    q: "Do you handle payment in installments?",
+    a: "Payment is by bank transfer, and we can discuss a staged schedule for larger packages — ask your agent when you inquire.",
+  },
+];
 
-interface FAQ {
-  q: string;
-  a: string;
-}
-
-interface FAQSectionProps {
-  faqs: FAQ[];
-}
-
-export function FAQSection({ faqs }: FAQSectionProps) {
-  const [openFaq, setOpenFaq] = useState<number | null>(0);
+export function FAQSection() {
   const { primaryColor } = useAgencyTheme();
-  const faqRefs = useRef<(HTMLDivElement | null)[]>([]);
-
-  useEffect(() => {
-    faqRefs.current.forEach((ref, index) => {
-      if (ref) {
-        gsap.fromTo(
-          ref,
-          { opacity: 0, y: 30 },
-          {
-            opacity: 1,
-            y: 0,
-            duration: 0.5,
-            delay: index * 0.1,
-            scrollTrigger: {
-              trigger: ref,
-              start: "top 90%",
-              toggleActions: "play none none reverse",
-            },
-          }
-        );
-      }
-    });
-  }, [faqs]);
-
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.08,
-        delayChildren: 0.2,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 30 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.5, ease: "easeOut" },
-    },
-  };
+  const [openIndex, setOpenIndex] = useState<number | null>(0);
 
   return (
-    <section id="faq" className="max-w-4xl mx-auto px-6 py-24">
-      <motion.div
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true }}
-        variants={containerVariants}
-      >
-        <motion.div variants={itemVariants} className="text-center max-w-3xl mx-auto mb-16">
-          <motion.span
-            className="text-sm font-semibold uppercase tracking-[0.3em]"
-            style={{ color: primaryColor || "#D2232A" }}
-            initial={{ opacity: 0 }}
-            whileInView={{ opacity: 1 }}
-            transition={{ duration: 0.6 }}
-            viewport={{ once: true }}
-          >
-            FAQ
-          </motion.span>
-          <motion.h2
-            className="font-display text-4xl md:text-5xl font-black mt-4 mb-6"
-            variants={itemVariants}
-          >
-            Good to Know
-          </motion.h2>
-          <motion.p
-            className="text-gray-600 text-lg"
-            variants={itemVariants}
-          >
-            Quick answers to the most common questions about our services.
-          </motion.p>
-        </motion.div>
-      </motion.div>
-
-      <motion.div
-        className="space-y-4"
-        initial="hidden"
-        whileInView="visible"
-        viewport={{ once: true }}
-        variants={containerVariants}
-      >
-        {faqs.map((item, i) => (
-          <motion.div
-            key={i}
-            ref={(el) => { faqRefs.current[i] = el; }}
-            variants={itemVariants}
-            className="bg-white rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow duration-300"
-            style={{
-              borderLeft: openFaq === i ? `4px solid ${primaryColor || "#D2232A"}` : "4px solid transparent",
-            }}
-          >
-            <button
-              type="button"
-              className="w-full text-left px-6 py-5 flex justify-between items-center font-semibold text-lg transition-colors duration-300 hover:bg-gray-50"
-              onClick={() => setOpenFaq(openFaq === i ? null : i)}
-            >
-              <motion.span
-                initial={{ opacity: 0, x: -10 }}
-                animate={{ opacity: 1, x: 0 }}
-                transition={{ delay: i * 0.05, duration: 0.3 }}
+    <section id="faq" className="py-16 md:py-24 bg-tct-cream">
+      <div className="max-w-3xl mx-auto px-6">
+        <h2 className="text-3xl font-bold text-center mb-12">Frequently Asked Questions</h2>
+        <div className="space-y-4">
+          {FAQS.map((faq, index) => (
+            <div key={index} className="bg-white rounded-lg shadow-sm border border-gray-100 overflow-hidden">
+              <button
+                onClick={() => setOpenIndex(openIndex === index ? null : index)}
+                className="w-full px-6 py-4 flex justify-between items-center text-left font-semibold hover:bg-black/[0.02] transition-colors"
               >
-                {item.q}
-              </motion.span>
-              <motion.span
-                className="text-2xl font-light transition-transform duration-300 ml-4"
-                style={{ color: primaryColor || "#D2232A" }}
-                animate={{
-                  rotate: openFaq === i ? 45 : 0,
-                }}
-                transition={{ duration: 0.3 }}
-              >
-                +
-              </motion.span>
-            </button>
-            <AnimatePresence>
-              {openFaq === i && (
-                <motion.div
-                  initial={{ height: 0, opacity: 0 }}
-                  animate={{
-                    height: "auto",
-                    opacity: 1,
-                    transition: {
-                      height: { duration: 0.3, ease: "easeInOut" },
-                      opacity: { duration: 0.3, delay: 0.1 },
-                    },
-                  }}
-                  exit={{
-                    height: 0,
-                    opacity: 0,
-                    transition: {
-                      height: { duration: 0.3, ease: "easeInOut" },
-                      opacity: { duration: 0.2 },
-                    },
-                  }}
+                {faq.q}
+                <svg
+                  xmlns="http://www.w3.org/2000/svg"
+                  width="20"
+                  height="20"
+                  viewBox="0 0 24 24"
+                  fill="none"
+                  stroke="currentColor"
+                  strokeWidth="2"
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  className={`transition-transform duration-300 shrink-0 ${openIndex === index ? "rotate-180" : ""}`}
+                  style={{ color: primaryColor }}
                 >
-                  <motion.p
-                    className="px-6 pb-6 text-gray-600 leading-relaxed"
-                    initial={{ opacity: 0, y: -10 }}
-                    animate={{ opacity: 1, y: 0 }}
-                    transition={{ duration: 0.3 }}
-                  >
-                    {item.a}
-                  </motion.p>
-                </motion.div>
-              )}
-            </AnimatePresence>
-          </motion.div>
-        ))}
-      </motion.div>
+                  <polyline points="6 9 12 15 18 9"></polyline>
+                </svg>
+              </button>
+              <div
+                className={`px-6 transition-all duration-300 ease-in-out overflow-hidden ${
+                  openIndex === index ? "max-h-40 pb-4 opacity-100" : "max-h-0 opacity-0"
+                }`}
+              >
+                <p style={{ color: "var(--tct-gray)" }}>{faq.a}</p>
+              </div>
+            </div>
+          ))}
+        </div>
+      </div>
     </section>
   );
 }

@@ -1,102 +1,49 @@
-// src/components/agency/SiteFooter.tsx
 "use client";
 
-import { motion } from "framer-motion";
+import { useAgencyTheme } from "@/src/hooks/useAgencyTheme";
 
-type AgencyLite = { slug: string; name: string };
-
-const SERVICES = [
-  "Umrah Packages",
-  "Flight Bookings",
-  "Hotel Reservations",
-  "Visa Consultation",
-  "Honeymoon Packages",
-  "Group Tours",
-  "Pilgrimage",
-];
-
-export default function SiteFooter({ agency }: { agency: AgencyLite }) {
-  const containerVariants = {
-    hidden: { opacity: 0 },
-    visible: {
-      opacity: 1,
-      transition: {
-        staggerChildren: 0.05,
-        delayChildren: 0.1,
-      },
-    },
-  };
-
-  const itemVariants = {
-    hidden: { opacity: 0, y: 20 },
-    visible: {
-      opacity: 1,
-      y: 0,
-      transition: { duration: 0.5, ease: "easeOut" },
-    },
-  };
+export function SiteFooter() {
+  const { primaryColor, agencyName, agencySlug } = useAgencyTheme();
+  const displayName = agencyName || "Travel Agency";
 
   return (
-    <motion.footer
-      className="border-t-4 py-12 px-6"
-      style={{ borderColor: "var(--tct-red)", backgroundColor: "var(--tct-black)" }}
-      initial={{ opacity: 0 }}
-      animate={{ opacity: 1 }}
-      transition={{ duration: 0.6 }}
-    >
-      <div className="max-w-6xl mx-auto">
-        <motion.div
-          className="flex flex-col md:flex-row justify-between gap-8"
-          variants={containerVariants}
-          initial="hidden"
-          whileInView="visible"
-          viewport={{ once: true }}
-        >
-          <motion.div variants={itemVariants}>
-            <motion.h3
-              className="font-display text-2xl font-black uppercase text-white mb-2"
-              whileHover={{ scale: 1.02, x: 5 }}
-              transition={{ duration: 0.3 }}
-            >
-              {agency.name}
-            </motion.h3>
-            <motion.p
-              className="text-sm"
-              style={{ color: "#999999" }}
-              variants={itemVariants}
-            >
-              Crafting Your Dream Trip
-            </motion.p>
-          </motion.div>
+    <footer className="bg-tct-black text-gray-300">
+      <div className="max-w-6xl mx-auto px-6 py-12">
+        <div className="grid grid-cols-1 md:grid-cols-4 gap-8">
+          <div className="col-span-1 md:col-span-2">
+            <h2 className="text-2xl font-bold text-white mb-4">{displayName}</h2>
+            <p className="text-sm max-w-sm">
+              Your trusted partner for unforgettable journeys — personalized travel planning
+              that exceeds expectations.
+            </p>
+          </div>
 
-          <motion.div
-            className="flex flex-wrap gap-x-8 gap-y-2 text-sm"
-            style={{ color: "#cccccc" }}
-            variants={containerVariants}
-          >
-            {SERVICES.map((s) => (
-              <motion.span
-                key={s}
-                variants={itemVariants}
-                whileHover={{ scale: 1.05, color: "#ffffff" }}
-                transition={{ duration: 0.2 }}
-              >
-                {s}
-              </motion.span>
-            ))}
-          </motion.div>
-        </motion.div>
+          <div>
+            <h4 className="text-white font-semibold mb-4">Quick Links</h4>
+            <ul className="space-y-2 text-sm">
+              <li><a href={`/${agencySlug}#about`} className="hover:text-white transition-colors">About Us</a></li>
+              <li><a href={`/${agencySlug}#packages`} className="hover:text-white transition-colors">Packages</a></li>
+              <li><a href={`/${agencySlug}#faq`} className="hover:text-white transition-colors">FAQ</a></li>
+            </ul>
+          </div>
 
-        <motion.p
-          className="mt-8 pt-6 border-t text-xs"
-          style={{ borderColor: "#333333", color: "#777777" }}
-          initial={{ opacity: 0 }}
-          animate={{ opacity: 1 }}
-          transition={{ duration: 0.6, delay: 0.5 }}
-        >
-          © {new Date().getFullYear()} {agency.name}. All rights reserved.
-        </motion.p>
+          <div>
+            <h4 className="text-white font-semibold mb-4">Follow Us</h4>
+            <div className="flex gap-4">
+              <a href="#" className="hover:text-white transition-colors" aria-label="Facebook">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg>
+              </a>
+              <a href="#" className="hover:text-white transition-colors" aria-label="Instagram">
+                <svg xmlns="http://www.w3.org/2000/svg" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><rect x="2" y="2" width="20" height="20" rx="5" ry="5"></rect><path d="M16 11.37A4 4 0 1 1 12.63 8 4 4 0 0 1 16 11.37z"></path><line x1="17.5" y1="6.5" x2="17.51" y2="6.5"></line></svg>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <div className="border-t border-white/10 mt-8 pt-8 text-center text-xs">
+          <p>© {new Date().getFullYear()} {displayName}. All rights reserved.</p>
+        </div>
       </div>
-    </motion.footer>
+    </footer>
   );
 }
