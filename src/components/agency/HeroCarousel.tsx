@@ -1,67 +1,85 @@
-"use client";
+// src/components/agency/HeroCarousel.tsx
 
-import { motion } from "framer-motion";
-import { useAgencyTheme } from "@/src/hooks/useAgencyTheme";
+import { splitName } from "@/src/lib/formatting";
+import { Eyebrow } from "@/src/components/ui/Eyebrow";
 
-export function HeroCarousel() {
-  const { primaryColor, agencyName } = useAgencyTheme();
-  const displayName = agencyName || "Our Agency";
+interface AgencyInfo {
+  name: string;
+  slug: string;
+  city: string | null;
+  primaryColor: string | null;
+  logoUrl: string | null;
+}
+
+interface HeroCarouselProps {
+  agency: AgencyInfo | null;
+  services: string[];
+}
+
+export function HeroCarousel({ agency, services }: HeroCarouselProps) {
+  // Safe fallback for name if agency is null to prevent splitName crashing
+  const displayName = agency?.name || "";
+  const { lead: nameLead = "", last: nameLast = "" } = splitName(displayName);
+
+  // Safe color fallback. If the CSS variable isn't defined, it uses the hex instead.
+  const accentColor = agency?.primaryColor || "#D2232A";
 
   return (
-    <section className="relative h-[80vh] min-h-[600px] flex items-center justify-center bg-tct-black text-white overflow-hidden">
-      <div className="absolute inset-0 bg-black/30 z-10" />
-
-      {/* faint dotted watermark, echoes the logo's texture used sitewide */}
+    <section className="relative overflow-hidden" style={{ backgroundColor: "#0A0A0A" }}>
+      {/* Faint red world-map watermark */}
       <div
-        className="absolute inset-0 opacity-[0.08] pointer-events-none"
+        className="absolute inset-0 opacity-[0.10] pointer-events-none"
         style={{
-          backgroundImage: "radial-gradient(circle at 1px 1px, white 1.5px, transparent 1.5px)",
-          backgroundSize: "36px 36px",
+          backgroundImage:
+            `radial-gradient(circle at 20% 30%, ${accentColor} 2px, transparent 2px), radial-gradient(circle at 60% 60%, ${accentColor} 2px, transparent 2px), radial-gradient(circle at 80% 20%, ${accentColor} 2px, transparent 2px)`,
+          backgroundSize: "40px 40px",
         }}
       />
 
-      <div className="max-w-4xl mx-auto px-6 text-center relative z-20">
-        <motion.h1
-          initial={{ opacity: 0, y: 30 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8 }}
-          className="text-4xl md:text-6xl lg:text-7xl font-bold mb-6 tracking-tight"
-        >
-          Explore the World with <br />
-          <span style={{ color: primaryColor }}>{displayName}</span>
-        </motion.h1>
+      {/* Subtle gradient depth */}
+      <div
+        className="absolute inset-0 pointer-events-none"
+        style={{ background: `radial-gradient(ellipse at top left, ${accentColor}20, transparent 60%)` }}
+      />
 
-        <motion.p
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.2 }}
-          className="text-lg md:text-xl mb-10 max-w-2xl mx-auto"
-          style={{ color: "#c4c4c4" }}
-        >
-          Discover unparalleled travel experiences crafted just for you. Your next adventure starts here.
-        </motion.p>
+      {/* Red accent bar */}
+      <div
+        className="absolute top-0 right-0 w-2/3 h-3 md:h-4"
+        style={{ backgroundColor: accentColor, clipPath: "polygon(15% 0, 100% 0, 100% 100%, 0 100%)" }}
+      />
 
-        <motion.div
-          initial={{ opacity: 0, y: 20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.8, delay: 0.4 }}
-          className="flex flex-col sm:flex-row justify-center gap-4"
+      <div className="relative max-w-6xl mx-auto px-6 pt-24 pb-20">
+        <Eyebrow light>{services.join("  •  ")}</Eyebrow>
+
+        <h1 className="font-display text-5xl md:text-7xl leading-[0.95] font-black uppercase mb-6 text-white">
+          {nameLead ? `${nameLead} ` : ""}
+          <span style={{ color: accentColor }}>{nameLast}</span>
+        </h1>
+
+        <div className="flex items-center gap-2 mb-8" aria-hidden="true">
+          <span className="h-px w-10 border-t-2 border-dotted" style={{ borderColor: accentColor }} />
+          <span className="text-sm" style={{ color: accentColor }}>✕</span>
+        </div>
+
+        <p className="max-w-xl text-base md:text-lg mb-8" style={{ color: "#b8b8b8" }}>
+          {displayName} plans Hajj, Umrah, and general tours from{" "}
+          {agency?.city ? `${agency.city}, Pakistan` : "Pakistan"} — flights, hotels, visas,
+          and group travel, handled by people who've done it before.
+        </p>
+
+        <a
+          href="#packages"
+          className="inline-block px-8 py-3 font-semibold uppercase tracking-wide text-sm text-white transition-transform hover:-translate-y-0.5"
+          style={{ backgroundColor: accentColor }}
         >
-          <a
-            href="#packages"
-            className="px-8 py-4 rounded-full font-semibold transition-transform hover:scale-105 text-white"
-            style={{ backgroundColor: primaryColor }}
-          >
-            Get Started
-          </a>
-          <a
-            href="#about"
-            className="px-8 py-4 rounded-full font-semibold border border-white text-white hover:bg-white hover:text-[#121212] transition-colors"
-          >
-            Learn More
-          </a>
-        </motion.div>
+          View Packages
+        </a>
       </div>
     </section>
   );
 }
+
+// -------------------------------------------------------------
+// 🚨 THIS IS WHAT WAS MISSING! DO NOT DELETE THIS LINE 🚨
+export default HeroCarousel; 
+// -------------------------------------------------------------
