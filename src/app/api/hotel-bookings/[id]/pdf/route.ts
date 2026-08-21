@@ -42,11 +42,13 @@ export async function GET(req: Request, { params }: RouteParams) {
   }
 
   try {
+    // FIX 1: Cast the dynamic element to 'any' to satisfy @react-pdf/renderer's strict Document element type
     const buffer = await renderToBuffer(
-      React.createElement(HotelBookingDocument, { booking, agency, variant })
+      React.createElement(HotelBookingDocument, { booking, agency, variant }) as any
     );
 
-    return new NextResponse(buffer, {
+    // FIX 2: Convert Node.js Buffer to a standard Web API Uint8Array for NextResponse compliance
+    return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
         "Content-Disposition": `inline; filename="${variant}-${booking.referenceNo || booking.id.slice(0, 8)}.pdf"`,

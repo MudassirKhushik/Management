@@ -28,13 +28,23 @@ interface AgencyInfo {
   carouselImages?: string[] | null;
 }
 
+// Updated interface to safely allow optional slides object structure coming from Next.js Page
 interface HeroCarouselProps {
   agency: AgencyInfo | null;
   services: string[];
   carouselImages?: string[];
+  slides?: Array<{
+    id: number;
+    title: string;
+    subtitle: string;
+    description: string;
+    cta: string;
+    image?: string;
+    gradient?: string;
+  }>;
 }
 
-export function HeroCarousel({ agency, services, carouselImages = [] }: HeroCarouselProps) {
+export function HeroCarousel({ agency, services, carouselImages = [], slides = [] }: HeroCarouselProps) {
   const [currentSlide, setCurrentSlide] = useState(0);
   const [isAutoPlaying, setIsAutoPlaying] = useState(true);
 
@@ -42,8 +52,13 @@ export function HeroCarousel({ agency, services, carouselImages = [] }: HeroCaro
   const displayName = agency?.name || "";
   const { lead: nameLead, last: nameLast } = splitName(displayName);
 
-  const hasRealImages = carouselImages && carouselImages.length > 0;
-  const images = hasRealImages ? carouselImages : [null]; // single "no image" slide
+  // Fallback fallback: prioritize explicit carouselImages, drop down to slide image keys if available
+  const parsedImages = carouselImages.length > 0 
+    ? carouselImages 
+    : slides.map(s => s.image).filter((img): img is string => !!img);
+
+  const hasRealImages = parsedImages.length > 0;
+  const images = hasRealImages ? parsedImages : [null]; // single "no image" slide
 
   const nextSlide = useCallback(() => {
     setCurrentSlide((prev) => (prev + 1) % images.length);
