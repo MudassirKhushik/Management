@@ -38,8 +38,8 @@ body {
   input:not([type="checkbox"]):not([type="radio"]):focus,
   select:focus,
   textarea:focus {
-    border-color: var(--color-tct-red) !important;
-    box-shadow: 0 0 0 3px color-mix(in srgb, var(--color-tct-red) 15%, transparent);
+    border-color: var(--agency-color, var(--color-tct-red)) !important;
+    box-shadow: 0 0 0 3px color-mix(in srgb, var(--agency-color, var(--color-tct-red)) 15%, transparent);
   }
 
   label {

@@ -4,9 +4,7 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../../auth";
 
-type RouteParams = {
-  params: Promise<{ id: string }>;
-};
+type RouteParams = { params: Promise<{ id: string }> };
 
 export async function GET(request: Request, { params }: RouteParams) {
   try {
@@ -64,8 +62,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
       );
     }
 
-    // Clear all previous line items across every service type before re-creating them,
-    // same "delete then recreate" pattern used by the Visa booking PUT route.
+    // Clear all previous line items across every service type before
+    // re-creating them — same "delete then recreate" pattern used by every
+    // other booking type's PUT route.
     await prisma.hotelBookingEntry.deleteMany({ where: { packageBookingId: id } });
     await prisma.transportSegment.deleteMany({ where: { packageBookingId: id } });
     await prisma.flightSegment.deleteMany({ where: { packageBookingId: id } });
@@ -90,6 +89,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
 
         hotels: {
           create: hotels.map((row: any) => ({
@@ -126,10 +127,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
             airline: row.airline,
             flightNo: row.flightNo,
             pnr: row.pnr || null,
-            departureAirport: row.fromAirport,
-            arrivalAirport: row.toAirport,
-            departureDateTime: new Date(`${row.date}T${row.departureTime || "00:00"}:00`),
-            arrivalDateTime: new Date(`${row.date}T${row.arrivalTime || "00:00"}:00`),
+            departureAirport: row.departureAirport,
+            arrivalAirport: row.arrivalAirport,
+            departureDateTime: new Date(`${row.departureDate}T${row.departureTime || "00:00"}:00`),
+            arrivalDateTime: new Date(`${row.arrivalDate || row.departureDate}T${row.arrivalTime || "00:00"}:00`),
             travelClass: row.travelClass || null,
             adults: Number(row.adults) || 1,
             children: Number(row.children) || 0,
@@ -168,6 +169,35 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
+// PATCH: quick single-field update (Manage page's inline Payment Status dropdown)
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const existing = await prisma.packageBooking.findUnique({ where: { id } });
+    if (!existing || existing.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const booking = await prisma.packageBooking.update({
+      where: { id },
+      data: {
+        ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
+      },
+    });
+
+    return NextResponse.json(booking);
+  } catch (error: any) {
+    console.error("Error in travelers PATCH [id] route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -182,7 +212,6 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
 
     await prisma.packageBooking.delete({ where: { id } });
-
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error in travelers DELETE [id] route:", error);

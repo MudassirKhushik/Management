@@ -36,17 +36,20 @@ export async function POST(request: Request) {
 
     const booking = await prisma.visaBooking.create({
       data: {
+        // Never trust a client-sent agencyId — always derived from session.
         agencyId: session.user.agencyId,
         agentName: body.agentName,
         guestName: body.guestName,
         nationality: body.nationality,
         mobileNo: body.mobileNo,
         referenceNo: body.referenceNo || null,
-        currency: body.currency || "PKR",
+        currency: body.currency || "USD",
         discount: parseFloat(body.discount) || 0,
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
         entries: {
           create: entriesList.map((row: any) => ({
             visaCategory: row.visaCategory,
@@ -67,7 +70,7 @@ export async function POST(request: Request) {
   } catch (error: any) {
     console.error("Error in visa-bookings POST route:", error);
     return NextResponse.json(
-      { error: error.message || "Internal Server Error" }, 
+      { error: error.message || "Internal Server Error" },
       { status: 500 }
     );
   }

@@ -94,7 +94,7 @@ function ArrivalsWidget() {
   return (
     <div className="bg-white rounded-2xl border border-black/5 shadow-sm overflow-hidden">
       <div className="flex items-center border-b border-black/5">
-      <input
+        <input
           type="text"
           placeholder="Search..."
           value={search}
@@ -114,6 +114,7 @@ function ArrivalsWidget() {
             </button>
           ))}
         </div>
+        
       </div>
 
       <div className="p-4 max-h-96 overflow-y-auto">
@@ -305,12 +306,22 @@ function DashboardInner() {
   }
 
   return (
-    <div className="p-4 md:p-6 max-w-7xl mx-auto">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
-        <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-[#121212]">Dashboard</h1>
-      </div>
+    <div className="min-h-full relative overflow-hidden bg-gradient-to-br from-[#FAF9F6] via-white to-[#FBEAEA]">
+      {/* faint dotted texture, echoes the logo's watermark used sitewide */}
+      <div
+        className="absolute inset-0 opacity-[0.04] pointer-events-none"
+        style={{
+          backgroundImage: "radial-gradient(circle at 1px 1px, #D2232A 1.5px, transparent 1.5px)",
+          backgroundSize: "32px 32px",
+        }}
+      />
 
-      <RevenueBar totalRevenue={totalRevenue} totalProfit={totalProfit} />
+      <div className="relative p-4 md:p-6 max-w-7xl mx-auto">
+        <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
+          <h1 className="text-xl md:text-2xl font-extrabold tracking-tight text-[#121212]">Dashboard</h1>
+        </div>
+
+        <RevenueBar totalRevenue={totalRevenue} totalProfit={totalProfit} />
 
       {/* Cards — icon + number share the top row (matches reference), label
           and a colored underline bar sit below. White card bg, dark bold
@@ -336,7 +347,8 @@ function DashboardInner() {
         ))}
       </div>
 
-      <ArrivalsWidget />
+        <ArrivalsWidget />
+      </div>
     </div>
   );
 }

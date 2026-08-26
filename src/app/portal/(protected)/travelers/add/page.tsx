@@ -1,7 +1,7 @@
 // src/app/portal/(protected)/travelers/add/page.tsx
-// v2: no checkbox gate. All four service sections are always visible; each is
-// independently addable/empty. "include" flags are derived from whether a section
-// actually has rows, not from a checkbox.
+// No checkbox gate. All four service sections are always visible; each is
+// independently addable/empty. "include" flags are derived server-side from
+// whether a section actually has rows, not from a checkbox.
 
 "use client";
 
@@ -17,15 +17,71 @@ import {
 } from "@/src/lib/sharedBookingFields";
 import { HotelRow, ROOM_TYPES, MEAL_PLANS, emptyHotelRow } from "@/src/lib/hotelBookingTypes";
 import { TransportRow, VEHICLE_TYPES, emptyTransportRow } from "@/src/lib/transportBookingTypes";
-import { FlightSegment, emptyFlightSegment } from "@/src/lib/flightBookingTypes";
+import { FlightSegment, TRAVEL_CLASSES, emptyFlightSegment } from "@/src/lib/flightBookingTypes";
 import { VisaRow, PROCESSING_TYPES, emptyVisaRow } from "@/src/lib/visaBookingTypes";
-import { sumLineItems } from "@/src/lib/pricingCalculations";
+import { sumLineItems, calculateHotelEntryTotals } from "@/src/lib/pricingCalculations";
+
+const inputClass =
+  "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
+const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
+
+function SectionCard({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
+        {title}
+      </h2>
+      {children}
+    </section>
+  );
+}
+
+function RowCard({
+  title,
+  onRemove,
+  children,
+}: {
+  title: string;
+  onRemove: () => void;
+  children: React.ReactNode;
+}) {
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-sm font-semibold text-[#121212]">{title}</span>
+        <button
+          type="button"
+          className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors"
+          onClick={onRemove}
+        >
+          Remove
+        </button>
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">{children}</div>
+    </div>
+  );
+}
+
+function AddRowButton({ label, onClick }: { label: string; onClick: () => void }) {
+  return (
+    <button
+      type="button"
+      className="w-full mt-4 rounded-lg border-2 border-dashed py-2.5 text-sm font-semibold transition-colors hover:bg-black/[0.02]"
+      style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
+      onClick={onClick}
+    >
+      + {label}
+    </button>
+  );
+}
 
 export default function AddPackageBookingPage() {
   const router = useRouter();
 
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
+  const [vendorName, setVendorName] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
 
   // Every section starts EMPTY — no forced first row, no checkbox gate.
   const [hotels, setHotels] = useState<HotelRow[]>([]);
@@ -58,19 +114,15 @@ export default function AddPackageBookingPage() {
     setTransports((rows) => rows.filter((row) => row.id !== rowId));
   }
 
-  // ---- Flight segment helpers (index-keyed, matches standalone Flight pages) ----
-  function updateFlightSegment(index: number, field: keyof FlightSegment, value: string | number) {
-    setFlights((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
+  // ---- Flight segment helpers (id-keyed, matches the rebuilt standalone Flight form) ----
+  function updateFlightSegment(rowId: string, field: keyof FlightSegment, value: string | number) {
+    setFlights((rows) => rows.map((row) => (row.id === rowId ? { ...row, [field]: value } : row)));
   }
   function addFlightSegment() {
-    setFlights((prev) => [...prev, { ...emptyFlightSegment }]);
+    setFlights((rows) => [...rows, emptyFlightSegment()]);
   }
-  function removeFlightSegment(index: number) {
-    setFlights((prev) => prev.filter((_, i) => i !== index));
+  function removeFlightSegment(rowId: string) {
+    setFlights((rows) => rows.filter((row) => row.id !== rowId));
   }
 
   // ---- Visa row helpers ----
@@ -85,13 +137,15 @@ export default function AddPackageBookingPage() {
   }
 
   // ---- Combined pricing across every section that currently has rows ----
+  const hotelLineItems = hotels
+    .filter((row) => row.checkIn && row.checkOut)
+    .map((row) => calculateHotelEntryTotals(row))
+    .map((t) => ({ buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal }));
+
   const combinedLineItems = [
-    ...hotels.map((r) => ({ buyingCost: r.buyingCostPerNight, sellingPrice: r.sellingPricePerNight })),
+    ...hotelLineItems,
     ...transports.map((r) => ({ buyingCost: r.buyingCost, sellingPrice: r.sellingPrice })),
-    ...flights.map((r: any) => ({
-      buyingCost: parseFloat(r.buyingCost) || 0,
-      sellingPrice: parseFloat(r.sellingPrice) || 0,
-    })),
+    ...flights.map((r) => ({ buyingCost: r.buyingCost, sellingPrice: r.sellingPrice })),
     ...visas.map((r) => ({ buyingCost: r.buyingCost, sellingPrice: r.sellingPrice })),
   ];
 
@@ -114,6 +168,8 @@ export default function AddPackageBookingPage() {
         body: JSON.stringify({
           ...header,
           ...footer,
+          vendorName,
+          paymentStatus,
           hotels,
           transports,
           flights,
@@ -123,7 +179,7 @@ export default function AddPackageBookingPage() {
 
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server responded with status ${res.status}`);
+        throw new Error(errorData.error || "Server rejected the booking");
       }
 
       router.push("/portal/travelers/manage");
@@ -136,620 +192,327 @@ export default function AddPackageBookingPage() {
   }
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">Add Full Package Booking</h1>
+    <div className="max-w-full mx-auto p-4 md:p-6">
+      <h1 className="text-2xl font-bold mb-6 text-[#121212]">Add Full Package Booking</h1>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-3 mb-4 rounded-md">{error}</div>
-      )}
-
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="space-y-5">
         <GlobalHeaderFields
           value={header}
           onChange={(field, value) => setHeader((h) => ({ ...h, [field]: value }))}
         />
 
-        {/* ---- HOTELS (always visible, same fields as standalone Hotel Booking form) ---- */}
-        <fieldset className="border p-4 mb-4">
-          <legend className="font-bold px-1">Hotels</legend>
+        <SectionCard title="Vendor">
+          <div>
+            <label className={labelClass}>Vendor Name</label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="Who you bought this package from (supplier, not the sales agent)"
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+            />
+          </div>
+        </SectionCard>
 
-          {hotels.length === 0 && <p className="text-sm text-gray-500 mb-2">No hotels added yet.</p>}
-
-          {hotels.map((row, index) => (
-            <div key={row.id} className="border p-3 mb-3">
-              <div className="flex justify-between items-center mb-2">
-                <strong>Hotel {index + 1}</strong>
-                <button type="button" className="border px-2" onClick={() => removeHotelRow(row.id)}>
-                  Remove
-                </button>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Hotel Name</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={row.hotelName}
-                  onChange={(e) => updateHotelRow(row.id, "hotelName", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="mb-2">
-                <label className="block">City</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={row.city}
-                  onChange={(e) => updateHotelRow(row.id, "city", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Room Type</label>
-                <select
-                  className="border p-2 w-full"
-                  value={row.roomType}
-                  onChange={(e) => updateHotelRow(row.id, "roomType", e.target.value)}
-                >
-                  {ROOM_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
+        {/* ---- HOTELS — same fields as standalone Hotel Booking form ---- */}
+        <SectionCard title="Hotels">
+          {hotels.length === 0 && <p className="text-sm text-gray-400 mb-3">No hotels added yet.</p>}
+          <div className="space-y-4">
+            {hotels.map((row, index) => (
+              <RowCard key={row.id} title={`Hotel ${index + 1}`} onRemove={() => removeHotelRow(row.id)}>
                 <div>
-                  <label className="block">Check-in</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={row.checkIn}
-                    onChange={(e) => updateHotelRow(row.id, "checkIn", e.target.value)}
-                    required
-                  />
+                  <label className={labelClass}>Hotel Name</label>
+                  <input type="text" className={inputClass} value={row.hotelName}
+                    onChange={(e) => updateHotelRow(row.id, "hotelName", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block">Check-out</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={row.checkOut}
-                    onChange={(e) => updateHotelRow(row.id, "checkOut", e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-4 gap-2 mb-2">
-                <div>
-                  <label className="block">Rooms</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="border p-2 w-full"
-                    value={row.rooms}
-                    onChange={(e) => updateHotelRow(row.id, "rooms", parseInt(e.target.value) || 1)}
-                  />
+                  <label className={labelClass}>City</label>
+                  <input type="text" className={inputClass} value={row.city}
+                    onChange={(e) => updateHotelRow(row.id, "city", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block">Adults</label>
-                  <input
-                    type="number"
-                    min={1}
-                    className="border p-2 w-full"
-                    value={row.adults}
-                    onChange={(e) => updateHotelRow(row.id, "adults", parseInt(e.target.value) || 1)}
-                  />
+                  <label className={labelClass}>Room Type</label>
+                  <select className={inputClass} value={row.roomType}
+                    onChange={(e) => updateHotelRow(row.id, "roomType", e.target.value)}>
+                    {ROOM_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="block">Children</label>
-                  <input
-                    type="number"
-                    min={0}
-                    className="border p-2 w-full"
-                    value={row.children}
-                    onChange={(e) => updateHotelRow(row.id, "children", parseInt(e.target.value) || 0)}
-                  />
+                  <label className={labelClass}>Meal Plan</label>
+                  <select className={inputClass} value={row.mealPlan}
+                    onChange={(e) => updateHotelRow(row.id, "mealPlan", e.target.value)}>
+                    <option value="">Select meal plan</option>
+                    {MEAL_PLANS.map((plan) => <option key={plan.value} value={plan.value}>{plan.label}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="block">Infants</label>
-                  <input
-                    type="number"
-                    min={0}
-                    className="border p-2 w-full"
-                    value={row.infants}
-                    onChange={(e) => updateHotelRow(row.id, "infants", parseInt(e.target.value) || 0)}
-                  />
-                </div>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Meal Plan</label>
-                <select
-                  className="border p-2 w-full"
-                  value={row.mealPlan}
-                  onChange={(e) => updateHotelRow(row.id, "mealPlan", e.target.value)}
-                >
-                  <option value="">Select meal plan</option>
-                  {MEAL_PLANS.map((mp) => (
-                    <option key={mp.value} value={mp.value}>
-                      {mp.label}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Confirmation No.</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={row.confirmationNo}
-                  onChange={(e) => updateHotelRow(row.id, "confirmationNo", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Buying Cost / Night</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={row.buyingCostPerNight}
-                    onChange={(e) =>
-                      updateHotelRow(row.id, "buyingCostPerNight", parseFloat(e.target.value) || 0)
-                    }
-                    required
-                  />
+                  <label className={labelClass}>Check-In Date</label>
+                  <input type="date" className={inputClass} value={row.checkIn}
+                    onChange={(e) => updateHotelRow(row.id, "checkIn", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block">Selling Price / Night</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={row.sellingPricePerNight}
-                    onChange={(e) =>
-                      updateHotelRow(row.id, "sellingPricePerNight", parseFloat(e.target.value) || 0)
-                    }
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-
-          <button type="button" className="border px-3 py-1" onClick={addHotelRow}>
-            + Add Hotel
-          </button>
-        </fieldset>
-
-        {/* ---- TRANSPORTS (always visible, same fields as standalone Transport Booking form) ---- */}
-        <fieldset className="border p-4 mb-4">
-          <legend className="font-bold px-1">Transports</legend>
-
-          {transports.length === 0 && <p className="text-sm text-gray-500 mb-2">No transports added yet.</p>}
-
-          {transports.map((row, index) => (
-            <div key={row.id} className="border p-3 mb-3">
-              <div className="flex justify-between items-center mb-2">
-                <strong>Transport {index + 1}</strong>
-                <button type="button" className="border px-2" onClick={() => removeTransportRow(row.id)}>
-                  Remove
-                </button>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Vehicle</label>
-                <select
-                  className="border p-2 w-full"
-                  value={row.vehicle}
-                  onChange={(e) => updateTransportRow(row.id, "vehicle", e.target.value)}
-                >
-                  {VEHICLE_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Sector</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  placeholder="e.g. Jeddah to Makkah"
-                  value={row.sector}
-                  onChange={(e) => updateTransportRow(row.id, "sector", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Pickup Date</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={row.pickupDate}
-                    onChange={(e) => updateTransportRow(row.id, "pickupDate", e.target.value)}
-                    required
-                  />
+                  <label className={labelClass}>Check-Out Date</label>
+                  <input type="date" className={inputClass} value={row.checkOut}
+                    onChange={(e) => updateHotelRow(row.id, "checkOut", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block">Pickup Time</label>
-                  <input
-                    type="time"
-                    className="border p-2 w-full"
-                    value={row.pickupTime}
-                    onChange={(e) => updateTransportRow(row.id, "pickupTime", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Quantity</label>
-                <input
-                  type="number"
-                  min={1}
-                  className="border p-2 w-full"
-                  value={row.qty}
-                  onChange={(e) => updateTransportRow(row.id, "qty", parseInt(e.target.value) || 1)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Buying Cost (Total)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={row.buyingCost}
-                    onChange={(e) => updateTransportRow(row.id, "buyingCost", parseFloat(e.target.value) || 0)}
-                    required
-                  />
+                  <label className={labelClass}>No. of Rooms</label>
+                  <input type="number" min={1} className={inputClass} value={row.rooms}
+                    onChange={(e) => updateHotelRow(row.id, "rooms", parseInt(e.target.value) || 1)} />
                 </div>
                 <div>
-                  <label className="block">Selling Price (Total)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={row.sellingPrice}
-                    onChange={(e) => updateTransportRow(row.id, "sellingPrice", parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-
-          <button type="button" className="border px-3 py-1" onClick={addTransportRow}>
-            + Add Transport
-          </button>
-        </fieldset>
-
-        {/* ---- FLIGHTS (always visible, same fields as standalone Flight Booking form) ---- */}
-        <fieldset className="border p-4 mb-4">
-          <legend className="font-bold px-1">Flights</legend>
-
-          {flights.length === 0 && <p className="text-sm text-gray-500 mb-2">No flights added yet.</p>}
-
-          {flights.map((seg, index) => (
-            <div key={index} className="border p-3 mb-3">
-              <div className="flex justify-between items-center mb-2">
-                <strong>Flight Segment {index + 1}</strong>
-                <button type="button" className="border px-2" onClick={() => removeFlightSegment(index)}>
-                  Remove
-                </button>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Date</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={seg.date}
-                    onChange={(e) => updateFlightSegment(index, "date", e.target.value)}
-                    required
-                  />
+                  <label className={labelClass}>Adults</label>
+                  <input type="number" min={1} className={inputClass} value={row.adults}
+                    onChange={(e) => updateHotelRow(row.id, "adults", parseInt(e.target.value) || 1)} />
                 </div>
                 <div>
-                  <label className="block">Airline</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full"
-                    value={seg.airline}
-                    onChange={(e) => updateFlightSegment(index, "airline", e.target.value)}
-                    required
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Flight No.</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full"
-                    value={seg.flightNo}
-                    onChange={(e) => updateFlightSegment(index, "flightNo", e.target.value)}
-                    required
-                  />
+                  <label className={labelClass}>Children</label>
+                  <input type="number" min={0} className={inputClass} value={row.children}
+                    onChange={(e) => updateHotelRow(row.id, "children", parseInt(e.target.value) || 0)} />
                 </div>
                 <div>
-                  <label className="block">PNR</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full"
-                    value={seg.pnr}
-                    onChange={(e) => updateFlightSegment(index, "pnr", e.target.value)}
-                  />
-                </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">From Airport</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full"
-                    value={seg.fromAirport}
-                    onChange={(e) => updateFlightSegment(index, "fromAirport", e.target.value)}
-                    required
-                  />
+                  <label className={labelClass}>Infants</label>
+                  <input type="number" min={0} className={inputClass} value={row.infants}
+                    onChange={(e) => updateHotelRow(row.id, "infants", parseInt(e.target.value) || 0)} />
                 </div>
                 <div>
-                  <label className="block">To Airport</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full"
-                    value={seg.toAirport}
-                    onChange={(e) => updateFlightSegment(index, "toAirport", e.target.value)}
-                    required
-                  />
+                  <label className={labelClass}>Confirmation / Voucher No</label>
+                  <input type="text" className={inputClass} value={row.confirmationNo}
+                    onChange={(e) => updateHotelRow(row.id, "confirmationNo", e.target.value)} />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div />
                 <div>
-                  <label className="block">Departure Time</label>
-                  <input
-                    type="time"
-                    className="border p-2 w-full"
-                    value={seg.departureTime}
-                    onChange={(e) => updateFlightSegment(index, "departureTime", e.target.value)}
-                  />
+                  <label className={labelClass}>Buying Cost (Per Night)</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.buyingCostPerNight}
+                    onChange={(e) => updateHotelRow(row.id, "buyingCostPerNight", parseFloat(e.target.value) || 0)} required />
                 </div>
                 <div>
-                  <label className="block">Arrival Time</label>
-                  <input
-                    type="time"
-                    className="border p-2 w-full"
-                    value={seg.arrivalTime}
-                    onChange={(e) => updateFlightSegment(index, "arrivalTime", e.target.value)}
-                  />
+                  <label className={labelClass}>Selling Price (Per Night)</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.sellingPricePerNight}
+                    onChange={(e) => updateHotelRow(row.id, "sellingPricePerNight", parseFloat(e.target.value) || 0)} required />
                 </div>
-              </div>
+              </RowCard>
+            ))}
+          </div>
+          <AddRowButton label="Add Another Hotel" onClick={addHotelRow} />
+        </SectionCard>
 
-              <div className="mb-2">
-                <label className="block">Class (Economy/Business)</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={seg.travelClass}
-                  onChange={(e) => updateFlightSegment(index, "travelClass", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-3 gap-2 mb-2">
+        {/* ---- TRANSPORTS — same fields as standalone Transport Booking form ---- */}
+        <SectionCard title="Transports">
+          {transports.length === 0 && <p className="text-sm text-gray-400 mb-3">No transports added yet.</p>}
+          <div className="space-y-4">
+            {transports.map((row, index) => (
+              <RowCard key={row.id} title={`Transport ${index + 1}`} onRemove={() => removeTransportRow(row.id)}>
                 <div>
-                  <label className="block">Adults</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full"
-                    value={seg.adults}
-                    onChange={(e) => updateFlightSegment(index, "adults", parseInt(e.target.value) || 0)}
-                  />
+                  <label className={labelClass}>Vehicle</label>
+                  <select className={inputClass} value={row.vehicle}
+                    onChange={(e) => updateTransportRow(row.id, "vehicle", e.target.value)}>
+                    {VEHICLE_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
                 </div>
                 <div>
-                  <label className="block">Children</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full"
-                    value={seg.children}
-                    onChange={(e) => updateFlightSegment(index, "children", parseInt(e.target.value) || 0)}
-                  />
+                  <label className={labelClass}>Sector</label>
+                  <input type="text" className={inputClass} placeholder="e.g. Jeddah to Makkah" value={row.sector}
+                    onChange={(e) => updateTransportRow(row.id, "sector", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block">Infants</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full"
-                    value={seg.infants}
-                    onChange={(e) => updateFlightSegment(index, "infants", parseInt(e.target.value) || 0)}
-                  />
-                </div>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Baggage</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={seg.baggage}
-                  onChange={(e) => updateFlightSegment(index, "baggage", e.target.value)}
-                />
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Buying Cost (Total)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={seg.buyingCost}
-                    onChange={(e) => updateFlightSegment(index, "buyingCost", parseFloat(e.target.value) || 0)}
-                    required
-                  />
+                  <label className={labelClass}>Pickup Date</label>
+                  <input type="date" className={inputClass} value={row.pickupDate}
+                    onChange={(e) => updateTransportRow(row.id, "pickupDate", e.target.value)} required />
                 </div>
                 <div>
-                  <label className="block">Selling Price (Total)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={seg.sellingPrice}
-                    onChange={(e) => updateFlightSegment(index, "sellingPrice", parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
-
-          <button type="button" className="border px-3 py-1" onClick={addFlightSegment}>
-            + Add Flight Segment
-          </button>
-        </fieldset>
-
-        {/* ---- VISAS (always visible, same fields as standalone Visa Booking form) ---- */}
-        <fieldset className="border p-4 mb-4">
-          <legend className="font-bold px-1">Visas</legend>
-
-          {visas.length === 0 && <p className="text-sm text-gray-500 mb-2">No visas added yet.</p>}
-
-          {visas.map((row, index) => (
-            <div key={row.id} className="border p-3 mb-3">
-              <div className="flex justify-between items-center mb-2">
-                <strong>Applicant {index + 1}</strong>
-                <button type="button" className="border px-2" onClick={() => removeVisaRow(row.id)}>
-                  Remove
-                </button>
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Visa Category</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  placeholder="e.g. Saudi Umrah, UK Tourist, Schengen Business"
-                  value={row.visaCategory}
-                  onChange={(e) => updateVisaRow(row.id, "visaCategory", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Applicant Name</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={row.applicantName}
-                  onChange={(e) => updateVisaRow(row.id, "applicantName", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Passport Number</label>
-                <input
-                  type="text"
-                  className="border p-2 w-full"
-                  value={row.passportNumber}
-                  onChange={(e) => updateVisaRow(row.id, "passportNumber", e.target.value)}
-                  required
-                />
-              </div>
-
-              <div className="mb-2">
-                <label className="block">Processing Type</label>
-                <select
-                  className="border p-2 w-full"
-                  value={row.processingType}
-                  onChange={(e) => updateVisaRow(row.id, "processingType", e.target.value)}
-                >
-                  <option value="">Select processing type</option>
-                  {PROCESSING_TYPES.map((type) => (
-                    <option key={type} value={type}>
-                      {type}
-                    </option>
-                  ))}
-                </select>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
-                <div>
-                  <label className="block">Submission Date</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={row.submissionDate}
-                    onChange={(e) => updateVisaRow(row.id, "submissionDate", e.target.value)}
-                  />
+                  <label className={labelClass}>Pickup Time</label>
+                  <input type="time" className={inputClass} value={row.pickupTime}
+                    onChange={(e) => updateTransportRow(row.id, "pickupTime", e.target.value)} />
                 </div>
                 <div>
-                  <label className="block">Expiry Date</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full"
-                    value={row.expiryDate}
-                    onChange={(e) => updateVisaRow(row.id, "expiryDate", e.target.value)}
-                  />
+                  <label className={labelClass}>Quantity</label>
+                  <input type="number" min={1} className={inputClass} value={row.qty}
+                    onChange={(e) => updateTransportRow(row.id, "qty", parseInt(e.target.value) || 1)} />
                 </div>
-              </div>
-
-              <div className="grid grid-cols-2 gap-2 mb-2">
+                <div />
                 <div>
-                  <label className="block">Buying Cost</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={row.buyingCost}
-                    onChange={(e) => updateVisaRow(row.id, "buyingCost", parseFloat(e.target.value) || 0)}
-                    required
-                  />
+                  <label className={labelClass}>Buying Cost (Total)</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.buyingCost}
+                    onChange={(e) => updateTransportRow(row.id, "buyingCost", parseFloat(e.target.value) || 0)} required />
                 </div>
                 <div>
-                  <label className="block">Selling Price</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full"
-                    value={row.sellingPrice}
-                    onChange={(e) => updateVisaRow(row.id, "sellingPrice", parseFloat(e.target.value) || 0)}
-                    required
-                  />
+                  <label className={labelClass}>Selling Price (Total)</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.sellingPrice}
+                    onChange={(e) => updateTransportRow(row.id, "sellingPrice", parseFloat(e.target.value) || 0)} required />
                 </div>
-              </div>
-            </div>
-          ))}
+              </RowCard>
+            ))}
+          </div>
+          <AddRowButton label="Add Another Transport" onClick={addTransportRow} />
+        </SectionCard>
 
-          <button type="button" className="border px-3 py-1" onClick={addVisaRow}>
-            + Add Visa Applicant
-          </button>
-        </fieldset>
+        {/* ---- FLIGHTS — same fields as the rebuilt standalone Flight Booking form ---- */}
+        <SectionCard title="Flights">
+          {flights.length === 0 && <p className="text-sm text-gray-400 mb-3">No flights added yet.</p>}
+          <div className="space-y-4">
+            {flights.map((row, index) => (
+              <RowCard key={row.id} title={`Segment ${index + 1}`} onRemove={() => removeFlightSegment(row.id)}>
+                <div>
+                  <label className={labelClass}>Airline</label>
+                  <input type="text" className={inputClass} value={row.airline}
+                    onChange={(e) => updateFlightSegment(row.id, "airline", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Flight No.</label>
+                  <input type="text" className={inputClass} value={row.flightNo}
+                    onChange={(e) => updateFlightSegment(row.id, "flightNo", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>PNR</label>
+                  <input type="text" className={inputClass} value={row.pnr}
+                    onChange={(e) => updateFlightSegment(row.id, "pnr", e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Travel Class</label>
+                  <select className={inputClass} value={row.travelClass}
+                    onChange={(e) => updateFlightSegment(row.id, "travelClass", e.target.value)}>
+                    {TRAVEL_CLASSES.map((cls) => <option key={cls} value={cls}>{cls}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Departure Airport</label>
+                  <input type="text" className={inputClass} value={row.departureAirport}
+                    onChange={(e) => updateFlightSegment(row.id, "departureAirport", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Arrival Airport</label>
+                  <input type="text" className={inputClass} value={row.arrivalAirport}
+                    onChange={(e) => updateFlightSegment(row.id, "arrivalAirport", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Departure Date</label>
+                  <input type="date" className={inputClass} value={row.departureDate}
+                    onChange={(e) => updateFlightSegment(row.id, "departureDate", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Departure Time</label>
+                  <input type="time" className={inputClass} value={row.departureTime}
+                    onChange={(e) => updateFlightSegment(row.id, "departureTime", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Arrival Date</label>
+                  <input type="date" className={inputClass} value={row.arrivalDate}
+                    onChange={(e) => updateFlightSegment(row.id, "arrivalDate", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Arrival Time</label>
+                  <input type="time" className={inputClass} value={row.arrivalTime}
+                    onChange={(e) => updateFlightSegment(row.id, "arrivalTime", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Adults</label>
+                  <input type="number" min={1} className={inputClass} value={row.adults}
+                    onChange={(e) => updateFlightSegment(row.id, "adults", parseInt(e.target.value) || 1)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Children</label>
+                  <input type="number" min={0} className={inputClass} value={row.children}
+                    onChange={(e) => updateFlightSegment(row.id, "children", parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Infants</label>
+                  <input type="number" min={0} className={inputClass} value={row.infants}
+                    onChange={(e) => updateFlightSegment(row.id, "infants", parseInt(e.target.value) || 0)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Baggage</label>
+                  <input type="text" className={inputClass} placeholder="e.g. 30kg checked + 7kg cabin" value={row.baggage}
+                    onChange={(e) => updateFlightSegment(row.id, "baggage", e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Buying Cost (Total for this leg)</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.buyingCost}
+                    onChange={(e) => updateFlightSegment(row.id, "buyingCost", parseFloat(e.target.value) || 0)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Selling Price (Total for this leg)</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.sellingPrice}
+                    onChange={(e) => updateFlightSegment(row.id, "sellingPrice", parseFloat(e.target.value) || 0)} required />
+                </div>
+              </RowCard>
+            ))}
+          </div>
+          <AddRowButton label="Add Another Segment" onClick={addFlightSegment} />
+        </SectionCard>
+
+        {/* ---- VISAS — same fields as standalone Visa Booking form ---- */}
+        <SectionCard title="Visas">
+          {visas.length === 0 && <p className="text-sm text-gray-400 mb-3">No visa applicants added yet.</p>}
+          <div className="space-y-4">
+            {visas.map((row, index) => (
+              <RowCard key={row.id} title={`Applicant ${index + 1}`} onRemove={() => removeVisaRow(row.id)}>
+                <div>
+                  <label className={labelClass}>Visa Category</label>
+                  <input type="text" className={inputClass} placeholder="e.g. Saudi Umrah, UK Tourist, Schengen Business" value={row.visaCategory}
+                    onChange={(e) => updateVisaRow(row.id, "visaCategory", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Applicant Name</label>
+                  <input type="text" className={inputClass} value={row.applicantName}
+                    onChange={(e) => updateVisaRow(row.id, "applicantName", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Passport Number</label>
+                  <input type="text" className={inputClass} value={row.passportNumber}
+                    onChange={(e) => updateVisaRow(row.id, "passportNumber", e.target.value)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Processing Type</label>
+                  <select className={inputClass} value={row.processingType}
+                    onChange={(e) => updateVisaRow(row.id, "processingType", e.target.value)}>
+                    <option value="">Select processing type</option>
+                    {PROCESSING_TYPES.map((type) => <option key={type} value={type}>{type}</option>)}
+                  </select>
+                </div>
+                <div>
+                  <label className={labelClass}>Submission Date</label>
+                  <input type="date" className={inputClass} value={row.submissionDate}
+                    onChange={(e) => updateVisaRow(row.id, "submissionDate", e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Expiry Date</label>
+                  <input type="date" className={inputClass} value={row.expiryDate}
+                    onChange={(e) => updateVisaRow(row.id, "expiryDate", e.target.value)} />
+                </div>
+                <div>
+                  <label className={labelClass}>Buying Cost</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.buyingCost}
+                    onChange={(e) => updateVisaRow(row.id, "buyingCost", parseFloat(e.target.value) || 0)} required />
+                </div>
+                <div>
+                  <label className={labelClass}>Selling Price</label>
+                  <input type="number" step="0.01" className={inputClass} value={row.sellingPrice}
+                    onChange={(e) => updateVisaRow(row.id, "sellingPrice", parseFloat(e.target.value) || 0)} required />
+                </div>
+              </RowCard>
+            ))}
+          </div>
+          <AddRowButton label="Add Another Applicant" onClick={addVisaRow} />
+        </SectionCard>
 
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
+          paymentStatus={paymentStatus}
+          onPaymentStatusChange={setPaymentStatus}
         />
 
-        {error && <p className="text-red-600 mb-2">{error}</p>}
+        {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
 
-        <button type="submit" className="border px-4 py-2 font-bold" disabled={saving}>
+        <button
+          type="submit"
+          className="w-full rounded-lg py-3 text-white font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ backgroundColor: "var(--agency-color)" }}
+          disabled={saving}
+        >
           {saving ? "Saving..." : "Save Package Booking"}
         </button>
       </form>

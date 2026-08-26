@@ -4,10 +4,16 @@ import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../../auth";
 
-type RouteParams = {
-  params: Promise<{ id: string }>;
-};
+type RouteParams = { params: Promise<{ id: string }> };
 
+function combineDateTime(dateStr: string, timeStr: string): Date {
+  if (!dateStr) return new Date();
+  const baseDate = dateStr.slice(0, 10);
+  const baseTime = timeStr || "00:00";
+  return new Date(`${baseDate}T${baseTime}:00`);
+}
+
+// GET single booking
 export async function GET(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -32,19 +38,7 @@ export async function GET(request: Request, { params }: RouteParams) {
   }
 }
 
-// ==========================================
-// UTILITY: Combine date and time into full Date
-// ==========================================
-function combineDateTime(dateStr: string, timeStr: string): Date {
-  if (!dateStr) return new Date();
-  const baseDate = dateStr.slice(0, 10); // format: YYYY-MM-DD
-  const baseTime = timeStr || "00:00";   // format: HH:MM
-  return new Date(`${baseDate}T${baseTime}:00`);
-}
-
-// ==========================================
-// PUT HANDLER: Update a flight booking
-// ==========================================
+// PUT: full update
 export async function PUT(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -69,26 +63,25 @@ export async function PUT(request: Request, { params }: RouteParams) {
         agentName: body.agentName,
         guestName: body.guestName,
         nationality: body.nationality,
-        mobileNo: body.mobileNo || "",
+        mobileNo: body.mobileNo || null,
         referenceNo: body.referenceNo || null,
-        currency: body.currency || "PKR",
+        currency: body.currency || "USD",
         discount: parseFloat(body.discount) || 0,
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
         segments: {
           create: segmentsList.map((s: any) => ({
             airline: s.airline,
             flightNo: s.flightNo,
-            pnr: s.pnr,
-            departureAirport: s.fromAirport,
-            arrivalAirport: s.toAirport,
-            
-            // 🛠️ Combine date + time fields to satisfy schema required arguments:
-            departureDateTime: combineDateTime(s.date, s.departureTime),
-            arrivalDateTime: combineDateTime(s.date, s.arrivalTime),
-            
-            travelClass: s.travelClass,
+            pnr: s.pnr || null,
+            departureAirport: s.departureAirport,
+            arrivalAirport: s.arrivalAirport,
+            departureDateTime: combineDateTime(s.departureDate, s.departureTime),
+            arrivalDateTime: combineDateTime(s.arrivalDate || s.departureDate, s.arrivalTime),
+            travelClass: s.travelClass || null,
             adults: parseInt(s.adults) || 1,
             children: parseInt(s.children) || 0,
             infants: parseInt(s.infants) || 0,
@@ -108,6 +101,36 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
+// PATCH: quick single-field update (Manage page's inline Payment Status dropdown)
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const existing = await prisma.flightBooking.findUnique({ where: { id } });
+    if (!existing || existing.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const booking = await prisma.flightBooking.update({
+      where: { id },
+      data: {
+        ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
+      },
+    });
+
+    return NextResponse.json(booking);
+  } catch (error: any) {
+    console.error("Error in flight-bookings PATCH [id] route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+
+// DELETE
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -122,7 +145,6 @@ export async function DELETE(request: Request, { params }: RouteParams) {
     }
 
     await prisma.flightBooking.delete({ where: { id } });
-
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error in flight-bookings DELETE [id] route:", error);

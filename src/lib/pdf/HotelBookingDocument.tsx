@@ -1,7 +1,8 @@
 // src/lib/pdf/HotelBookingDocument.tsx
 //
-// Voucher = client-facing, ZERO pricing shown at all (not even selling price) —
-//   booking logistics only: dates, rooms, meal plan, confirmation number.
+// Voucher = client-facing. Shows the TOTAL SELLING PRICE (subtotal/discount/
+//   VAT/final total) so the client knows what they owe — but never buying
+//   cost or profit, and never a per-hotel price breakdown.
 // Invoice = internal/dealer-facing, full pricing (buying + selling + profit).
 //
 // Hotels are grouped by city into separate titled blocks (e.g. "JEDDAH HOTEL
@@ -41,6 +42,7 @@ type BookingData = {
   discount: number;
   vatPercent: number;
   paymentType: string | null;
+  paymentStatus: string | null;
   note: string | null;
   createdAt: string | Date;
   hotels: HotelEntry[];
@@ -95,7 +97,7 @@ export function HotelBookingDocument({
 
     headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
     logoRow: { flexDirection: "row", alignItems: "center", gap: 8 },
-    logo: { width: 85, height: 38, objectFit: "contain" },
+    logo: { width: 100, height: 60, objectFit: "contain" },
     agencyName: { fontSize: 14, fontFamily: "Helvetica-Bold" },
     docTitleBlock: { alignItems: "flex-end" },
     docTitle: { fontSize: 22, fontFamily: "Helvetica-Bold", letterSpacing: 1.5, color: accent },
@@ -115,7 +117,7 @@ export function HotelBookingDocument({
     infoLabel: { color: "#6B6B6B" },
     infoValue: { fontFamily: "Helvetica-Bold" },
 
-    cityTitleBar: { backgroundColor: "#D2232A", paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, marginBottom: 0, marginTop: 6 },
+    cityTitleBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, marginBottom: 0, marginTop: 6 },
     cityTitle: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.8 },
     table: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 4, borderBottomRightRadius: 4, marginBottom: 16 },
     tableHeaderRow: { flexDirection: "row", backgroundColor: "#F3F1EC" },
@@ -199,6 +201,7 @@ export function HotelBookingDocument({
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Agent</Text><Text style={styles.infoValue}>{booking.agentName}</Text></View>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Reference No.</Text><Text style={styles.infoValue}>{booking.referenceNo || "—"}</Text></View>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Currency</Text><Text style={styles.infoValue}>{booking.currency}</Text></View>
+              <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Status</Text><Text style={styles.infoValue}>{booking.paymentStatus || "Pending"}</Text></View>
               {isInvoice && (
                 <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Type</Text><Text style={styles.infoValue}>{booking.paymentType || "—"}</Text></View>
               )}
@@ -266,21 +269,22 @@ export function HotelBookingDocument({
           </View>
         ))}
 
-        {/* Pricing is Invoice-only — Voucher shows zero pricing, per the reference. */}
-        {isInvoice && (
-          <View style={styles.summaryBox}>
-            <View style={styles.summaryLine}><Text style={styles.infoLabel}>Subtotal</Text><Text>{money(grossSelling, booking.currency)}</Text></View>
-            {booking.discount > 0 && (
-              <View style={styles.summaryLine}><Text style={styles.infoLabel}>Discount</Text><Text>-{money(booking.discount, booking.currency)}</Text></View>
-            )}
-            <View style={styles.summaryLine}><Text style={styles.infoLabel}>VAT ({booking.vatPercent || 0}%)</Text><Text>{money(vatAmount, booking.currency)}</Text></View>
+        {/* Voucher shows the total selling price (what the client owes) but
+            never buying cost or profit — those stay invoice-only. */}
+        <View style={styles.summaryBox}>
+          <View style={styles.summaryLine}><Text style={styles.infoLabel}>Subtotal</Text><Text>{money(grossSelling, booking.currency)}</Text></View>
+          {booking.discount > 0 && (
+            <View style={styles.summaryLine}><Text style={styles.infoLabel}>Discount</Text><Text>-{money(booking.discount, booking.currency)}</Text></View>
+          )}
+          <View style={styles.summaryLine}><Text style={styles.infoLabel}>VAT ({booking.vatPercent || 0}%)</Text><Text>{money(vatAmount, booking.currency)}</Text></View>
+          {isInvoice && (
             <View style={styles.summaryLine}><Text style={styles.infoLabel}>Net Profit</Text><Text>{money(totals.profit, booking.currency)}</Text></View>
-            <View style={styles.summaryTotalLine}>
-              <Text style={styles.summaryTotalLabel}>TOTAL</Text>
-              <Text style={styles.summaryTotalValue}>{money(totals.netTotal, booking.currency)}</Text>
-            </View>
+          )}
+          <View style={styles.summaryTotalLine}>
+            <Text style={styles.summaryTotalLabel}>TOTAL</Text>
+            <Text style={styles.summaryTotalValue}>{money(totals.netTotal, booking.currency)}</Text>
           </View>
-        )}
+        </View>
 
         <View style={styles.footer}>
           {isInvoice ? (
@@ -309,8 +313,8 @@ export function HotelBookingDocument({
           {agency.noShowPolicy && <Text style={styles.policyText}>No-Show Policy: {agency.noShowPolicy}</Text>}
 
           <View style={styles.signOff}>
-            <Text style={styles.signOffText}>Thanks and Best Regards,</Text>
-            <Text style={styles.signOffName}>{booking.agentName}</Text>
+            <Text style={styles.signOffText}>Dear {booking.guestName},</Text>
+            <Text style={styles.signOffText}>Thank you for choosing us — we look forward to serving you.</Text>
           </View>
         </View>
       </Page>

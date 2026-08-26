@@ -1,36 +1,36 @@
 // src/app/api/agencies/public/route.ts
 //
-// PUBLIC route — no auth check, intended for the public agency site's client
-// components (page.tsx, which is "use client" and can't call prisma directly).
-// Only returns display-safe fields. Never add bank/policy fields to this route.
+// PUBLIC on purpose — visitors browsing an agency's site aren't logged in,
+// so this reads the agency by ?agencySlug= rather than a session.
 
-import { prisma } from "@/src/lib/prisma";
 import { NextResponse } from "next/server";
+import { prisma } from "@/src/lib/prisma";
 
 export async function GET(req: Request) {
   const { searchParams } = new URL(req.url);
-  const slug = (searchParams.get("agencySlug") || "").trim().toLowerCase();
+  const agencySlug = searchParams.get("agencySlug");
 
-  if (!slug) {
+  if (!agencySlug) {
     return NextResponse.json({ error: "agencySlug is required" }, { status: 400 });
   }
 
   const agency = await prisma.agency.findUnique({
-    where: { slug },
-    select: {
-      name: true,
-      slug: true,
-      city: true,
-      primaryColor: true,
-      logoUrl: true,
-      isActive: true,
-      publicSiteEnabled: true,
-    },
+    where: { slug: agencySlug },
+    include: { media: { orderBy: { position: "asc" } } },
   });
 
-  if (!agency || !agency.isActive || !agency.publicSiteEnabled) {
+  if (!agency || !agency.isActive) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  return NextResponse.json(agency);
+  return NextResponse.json({
+    name: agency.name,
+    slug: agency.slug,
+    city: agency.city,
+    primaryColor: agency.primaryColor,
+    logoUrl: agency.logoUrl,
+    aboutImageUrl: agency.aboutImageUrl,
+    carousel: agency.media.filter((m) => m.section === "carousel").map((m) => m.url),
+    gallery: agency.media.filter((m) => m.section === "gallery").map((m) => m.url),
+  });
 }

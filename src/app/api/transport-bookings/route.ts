@@ -46,6 +46,8 @@ export async function POST(request: Request) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
         segments: {
           create: (body.segments || []).map((row: any) => ({
             vehicle: row.vehicle,

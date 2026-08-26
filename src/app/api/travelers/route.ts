@@ -1,7 +1,6 @@
 // src/app/api/travelers/route.ts
-// v2: no checkbox flags sent from the client anymore. includeX booleans are derived
-// server-side from whether each array actually has rows.
-// agencyId is always taken from the session, never trusted from the client body.
+// includeX booleans are derived server-side from whether each array actually
+// has rows — never trusted from the client. agencyId always from session.
 
 import { prisma } from "@/src/lib/prisma";
 import { NextResponse } from "next/server";
@@ -56,9 +55,8 @@ export async function POST(req: Request) {
         nationality: body.nationality,
         mobileNo: body.mobileNo,
         referenceNo: body.referenceNo || null,
-        currency: body.currency,
+        currency: body.currency || "USD",
 
-        // derived server-side from actual row counts, never trusted from the client
         includeHotels: hotels.length > 0,
         includeTransports: transports.length > 0,
         includeFlights: flights.length > 0,
@@ -68,6 +66,8 @@ export async function POST(req: Request) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
 
         hotels:
           hotels.length > 0
@@ -105,8 +105,9 @@ export async function POST(req: Request) {
               }
             : undefined,
 
-        // date + time combined the same way as the standalone Flight rebuild —
-        // one shared "date" field, separate departure/arrival TIME fields.
+        // Matches the standalone Flight rebuild: separate departure/arrival
+        // dates (not one shared "date"), departureAirport/arrivalAirport
+        // naming — full field parity with the standalone Flight form.
         flightSegments:
           flights.length > 0
             ? {
@@ -114,10 +115,10 @@ export async function POST(req: Request) {
                   airline: row.airline,
                   flightNo: row.flightNo,
                   pnr: row.pnr || null,
-                  departureAirport: row.fromAirport,
-                  arrivalAirport: row.toAirport,
-                  departureDateTime: new Date(`${row.date}T${row.departureTime || "00:00"}:00`),
-                  arrivalDateTime: new Date(`${row.date}T${row.arrivalTime || "00:00"}:00`),
+                  departureAirport: row.departureAirport,
+                  arrivalAirport: row.arrivalAirport,
+                  departureDateTime: new Date(`${row.departureDate}T${row.departureTime || "00:00"}:00`),
+                  arrivalDateTime: new Date(`${row.arrivalDate || row.departureDate}T${row.arrivalTime || "00:00"}:00`),
                   travelClass: row.travelClass || null,
                   adults: Number(row.adults) || 1,
                   children: Number(row.children) || 0,
@@ -154,8 +155,8 @@ export async function POST(req: Request) {
     });
 
     return NextResponse.json(booking);
-  } catch (err) {
+  } catch (err: any) {
     console.error("Critical error in package-booking POST route:", err);
-    return NextResponse.json({ error: "Could not create package booking." }, { status: 500 });
+    return NextResponse.json({ error: err.message || "Could not create package booking." }, { status: 500 });
   }
 }

@@ -1,7 +1,4 @@
 // src/app/api/hotel-bookings/[id]/route.ts
-//
-// ⚠️ Same note as route.ts — double check the auth import line matches
-// your existing src/app/api/travelers/[id]/route.ts file.
 
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../auth";
@@ -32,8 +29,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-// PUT: full update. Simplest safe approach — delete the old hotel rows and
-// create the new set sent from the form, inside the same update call.
+// PUT: full update
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.agencyId) {
@@ -64,6 +60,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         vatPercent: body.vatPercent || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
         hotels: {
           create: (body.hotels || []).map((row: any) => ({
             hotelName: row.hotelName,
@@ -89,6 +87,36 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   } catch (error) {
     console.error("Failed to update hotel booking:", error);
     return NextResponse.json({ error: "Failed to update hotel booking" }, { status: 500 });
+  }
+}
+
+// PATCH: quick single-field update (used by the Manage page's inline
+// Payment Status dropdown — doesn't touch anything else on the booking)
+export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  const session = await auth();
+  if (!session?.user?.agencyId) {
+    return NextResponse.json({ error: "Not authorized" }, { status: 401 });
+  }
+  const { id } = await params;
+
+  try {
+    const existing = await prisma.hotelBooking.findUnique({ where: { id } });
+    if (!existing || existing.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const booking = await prisma.hotelBooking.update({
+      where: { id },
+      data: {
+        ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
+      },
+    });
+
+    return NextResponse.json(booking);
+  } catch (error) {
+    console.error("Failed to patch hotel booking:", error);
+    return NextResponse.json({ error: "Failed to update" }, { status: 500 });
   }
 }
 

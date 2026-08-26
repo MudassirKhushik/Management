@@ -18,6 +18,8 @@ model Agency {
   createdAt     DateTime @default(now())
   logoUrl           String?
   publicSiteEnabled Boolean @default(true)
+  aboutImageUrl String?
+  media         Media[]
 
   bankAccountName    String?
   bankName           String?
@@ -70,6 +72,16 @@ model Inquiry {
   createdAt   DateTime @default(now())
 }
 
+model Media {
+  id        String   @id @default(cuid())
+  agencyId  String
+  agency    Agency   @relation(fields: [agencyId], references: [id])
+  section   String
+  url       String
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+}
+
 // ============================================================
 // FULL PACKAGE BOOKING — the combined wizard (roadmap item 6)
 // One global header + footer. Section checkboxes decide which
@@ -80,6 +92,9 @@ model PackageBooking {
   id          String   @id @default(cuid())
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
+  vendorName String?
+  paymentStatus String? @default("Pending")
+
 
   // --- Global Header (own copy) ---
   agentName   String
@@ -119,6 +134,8 @@ model HotelBooking {
   id          String   @id @default(cuid())
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
+  vendorName String?
+  paymentStatus String? @default("Pending")
   
 
   // --- Global Header (own copy) ---
@@ -171,6 +188,8 @@ model TransportBooking {
   id          String   @id @default(cuid())
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
+  vendorName String?
+  paymentStatus String? @default("Pending")
 
   // --- Global Header (own copy) ---
   agentName   String
@@ -215,6 +234,9 @@ model FlightBooking {
   id          String   @id @default(cuid())
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
+  vendorName String?
+  paymentStatus String? @default("Pending")
+  
 
   // --- Global Header (own copy) ---
   agentName   String
@@ -266,6 +288,8 @@ model VisaBooking {
   id          String   @id @default(cuid())
   agencyId    String
   agency      Agency   @relation(fields: [agencyId], references: [id])
+  vendorName String?
+  paymentStatus String? @default("Pending")
 
   // --- Global Header (own copy) ---
   agentName   String

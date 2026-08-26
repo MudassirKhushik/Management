@@ -1,3 +1,5 @@
+// src/app/portal/(protected)/flight-bookings/add/page.tsx
+
 "use client";
 
 import { useState } from "react";
@@ -10,302 +12,305 @@ import {
   GlobalHeaderData,
   FooterData,
 } from "@/src/lib/sharedBookingFields";
-import { FlightSegment, emptyFlightSegment } from "@/src/lib/flightBookingTypes";
+import { FlightSegment, TRAVEL_CLASSES, emptyFlightSegment } from "@/src/lib/flightBookingTypes";
 import { sumLineItems } from "@/src/lib/pricingCalculations";
+
+const inputClass =
+  "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
+const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
 
 export default function AddFlightBookingPage() {
   const router = useRouter();
-
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
-  const [segments, setSegments] = useState<FlightSegment[]>([{ ...emptyFlightSegment }]);
+  const [vendorName, setVendorName] = useState("");
+  const [paymentStatus, setPaymentStatus] = useState("Pending");
+  const [segments, setSegments] = useState<FlightSegment[]>([emptyFlightSegment()]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
-  function updateSegment(index: number, field: keyof FlightSegment, value: string | number) {
-    setSegments((prev) => {
-      const copy = [...prev];
-      copy[index] = { ...copy[index], [field]: value };
-      return copy;
-    });
+  function updateSegment(id: string, field: keyof FlightSegment, value: string | number) {
+    setSegments((rows) => rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
   }
-
   function addSegment() {
-    setSegments((prev) => [...prev, { ...emptyFlightSegment }]);
+    setSegments((rows) => [...rows, emptyFlightSegment()]);
+  }
+  function removeSegment(id: string) {
+    setSegments((rows) => (rows.length > 1 ? rows.filter((row) => row.id !== id) : rows));
   }
 
-  function removeSegment(index: number) {
-    setSegments((prev) => prev.filter((_, i) => i !== index));
-  }
-
-    const { grossBuying, grossSelling } = sumLineItems(
-    segments.map((row: any) => ({ 
-      buyingCost: parseFloat(row.buyingCost) || 0, 
-      sellingPrice: parseFloat(row.sellingPrice) || 0 
-    }))
+  const { grossBuying, grossSelling } = sumLineItems(
+    segments.map((row) => ({ buyingCost: row.buyingCost, sellingPrice: row.sellingPrice }))
   );
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
     setSaving(true);
-
     try {
       const res = await fetch("/api/flight-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          ...header,
-          ...footer,
-          segments,
-        }),
+        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, segments }),
       });
-
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
-        throw new Error(errorData.error || `Server responded with status ${res.status}`);
+        throw new Error(errorData.error || "Server rejected the booking");
       }
-
       router.push("/portal/flight-bookings/manage");
     } catch (err: any) {
-      console.error("Submission failed:", err);
-      setError(err.message || "Could not create booking. Please try again.");
+      console.error(err);
+      setError(err.message || "Could not save the booking. Please check the fields and try again.");
     } finally {
       setSaving(false);
     }
   }
 
   return (
-    <div className="p-4 max-w-5xl mx-auto">
-      <h1 className="text-xl font-bold mb-4">Add Flight Booking</h1>
+    <div className="max-w-full mx-auto p-4 md:p-6">
+      <h1 className="text-2xl font-bold mb-6 text-[#121212]">Add Flight Booking</h1>
 
-      {error && (
-        <div className="bg-red-50 border border-red-200 text-red-700 p-3 mb-4 rounded-md font-mono text-sm">
-          <strong>Error:</strong> {error}
-        </div>
-      )}
-
-      <form onSubmit={handleSubmit}>
+      <form onSubmit={handleSubmit} className="space-y-5">
         <GlobalHeaderFields
           value={header}
           onChange={(field, value) => setHeader((h) => ({ ...h, [field]: value }))}
         />
 
-        <fieldset className="border p-4 mb-4 rounded-md bg-white shadow-sm">
-          <legend className="font-bold px-2 text-sm text-gray-700">Flight Segments</legend>
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
+            Vendor
+          </h2>
+          <div>
+            <label className={labelClass}>Vendor Name</label>
+            <input
+              type="text"
+              className={inputClass}
+              placeholder="Who you bought this flight from (supplier, not the sales agent)"
+              value={vendorName}
+              onChange={(e) => setVendorName(e.target.value)}
+            />
+          </div>
+        </section>
 
-          {segments.map((seg, index) => (
-            <div key={index} className="border p-4 mb-4 rounded bg-gray-50 relative">
-              <div className="flex justify-between items-center mb-3">
-                <span className="font-semibold text-gray-800">Segment #{index + 1}</span>
-                {segments.length > 1 && (
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
+            Flight Segments
+          </h2>
+
+          <div className="space-y-4">
+            {segments.map((row, index) => (
+              <div key={row.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                <div className="flex justify-between items-center mb-3">
+                  <span className="text-sm font-semibold text-[#121212]">Segment {index + 1}</span>
                   <button
                     type="button"
-                    className="text-sm border border-red-300 text-red-600 px-3 py-1 rounded bg-white hover:bg-red-50 transition"
-                    onClick={() => removeSegment(index)}
+                    className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors"
+                    onClick={() => removeSegment(row.id)}
                   >
                     Remove
                   </button>
-                )}
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div>
+                    <label className={labelClass}>Airline</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={row.airline}
+                      onChange={(e) => updateSegment(row.id, "airline", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Flight No.</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={row.flightNo}
+                      onChange={(e) => updateSegment(row.id, "flightNo", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>PNR</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={row.pnr}
+                      onChange={(e) => updateSegment(row.id, "pnr", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Travel Class</label>
+                    <select
+                      className={inputClass}
+                      value={row.travelClass}
+                      onChange={(e) => updateSegment(row.id, "travelClass", e.target.value)}
+                    >
+                      {TRAVEL_CLASSES.map((cls) => (
+                        <option key={cls} value={cls}>{cls}</option>
+                      ))}
+                    </select>
+                  </div>
+                  <div>
+                    <label className={labelClass}>Departure Airport</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={row.departureAirport}
+                      onChange={(e) => updateSegment(row.id, "departureAirport", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Arrival Airport</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      value={row.arrivalAirport}
+                      onChange={(e) => updateSegment(row.id, "arrivalAirport", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Departure Date</label>
+                    <input
+                      type="date"
+                      className={inputClass}
+                      value={row.departureDate}
+                      onChange={(e) => updateSegment(row.id, "departureDate", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Departure Time</label>
+                    <input
+                      type="time"
+                      className={inputClass}
+                      value={row.departureTime}
+                      onChange={(e) => updateSegment(row.id, "departureTime", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Arrival Date</label>
+                    <input
+                      type="date"
+                      className={inputClass}
+                      value={row.arrivalDate}
+                      onChange={(e) => updateSegment(row.id, "arrivalDate", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Arrival Time</label>
+                    <input
+                      type="time"
+                      className={inputClass}
+                      value={row.arrivalTime}
+                      onChange={(e) => updateSegment(row.id, "arrivalTime", e.target.value)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Adults</label>
+                    <input
+                      type="number"
+                      min={1}
+                      className={inputClass}
+                      value={row.adults}
+                      onChange={(e) => updateSegment(row.id, "adults", parseInt(e.target.value) || 1)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Children</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className={inputClass}
+                      value={row.children}
+                      onChange={(e) => updateSegment(row.id, "children", parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Infants</label>
+                    <input
+                      type="number"
+                      min={0}
+                      className={inputClass}
+                      value={row.infants}
+                      onChange={(e) => updateSegment(row.id, "infants", parseInt(e.target.value) || 0)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Baggage</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="e.g. 30kg checked + 7kg cabin"
+                      value={row.baggage}
+                      onChange={(e) => updateSegment(row.id, "baggage", e.target.value)}
+                    />
+                  </div>
+                  <div />
+                  <div>
+                    <label className={labelClass}>Buying Cost (Total for this leg)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={inputClass}
+                      value={row.buyingCost}
+                      onChange={(e) => updateSegment(row.id, "buyingCost", parseFloat(e.target.value) || 0)}
+                      required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Selling Price (Total for this leg)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={inputClass}
+                      value={row.sellingPrice}
+                      onChange={(e) => updateSegment(row.id, "sellingPrice", parseFloat(e.target.value) || 0)}
+                      required
+                    />
+                  </div>
+                </div>
               </div>
-
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                <div>
-                  <label className="block text-sm font-medium mb-1">Date *</label>
-                  <input
-                    type="date"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.date}
-                    onChange={(e) => updateSegment(index, "date", e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Airline *</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.airline}
-                    onChange={(e) => updateSegment(index, "airline", e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Flight No *</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.flightNo}
-                    onChange={(e) => updateSegment(index, "flightNo", e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">PNR</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.pnr}
-                    onChange={(e) => updateSegment(index, "pnr", e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">From Airport *</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.fromAirport}
-                    onChange={(e) => updateSegment(index, "fromAirport", e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">To Airport *</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.toAirport}
-                    onChange={(e) => updateSegment(index, "toAirport", e.target.value)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Departure Time</label>
-                  <input
-                    type="time"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.departureTime}
-                    onChange={(e) => updateSegment(index, "departureTime", e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Arrival Time</label>
-                  <input
-                    type="time"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.arrivalTime}
-                    onChange={(e) => updateSegment(index, "arrivalTime", e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Class (Economy/Business)</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.travelClass}
-                    onChange={(e) => updateSegment(index, "travelClass", e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Adults</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.adults}
-                    onChange={(e) => updateSegment(index, "adults", parseInt(e.target.value) || 0)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Children</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.children}
-                    onChange={(e) => updateSegment(index, "children", parseInt(e.target.value) || 0)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Infants</label>
-                  <input
-                    type="number"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.infants}
-                    onChange={(e) => updateSegment(index, "infants", parseInt(e.target.value) || 0)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Baggage</label>
-                  <input
-                    type="text"
-                    className="border p-2 w-full rounded bg-white"
-                    value={seg.baggage}
-                    onChange={(e) => updateSegment(index, "baggage", e.target.value)}
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Buying Cost *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    className="border p-2 w-full rounded bg-white"
-                    value={(seg as any).buyingCost || ""}
-                    onChange={(e) => updateSegment(index, "buyingCost" as any, parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-
-                <div>
-                  <label className="block text-sm font-medium mb-1">Selling Price *</label>
-                  <input                     type="number"
-                    step="0.01"
-                    className="border p-2 w-full rounded bg-white"
-                    value={(seg as any).sellingPrice || ""}
-                    onChange={(e) => updateSegment(index, "sellingPrice" as any, parseFloat(e.target.value) || 0)}
-                    required
-                  />
-                </div>
-              </div>
-            </div>
-          ))}
+            ))}
+          </div>
 
           <button
             type="button"
-            className="w-full mt-2 border border-dashed border-blue-400 text-blue-600 font-medium py-2 rounded bg-blue-50 hover:bg-blue-100 transition"
+            className="w-full mt-4 rounded-lg border-2 border-dashed py-2.5 text-sm font-semibold transition-colors hover:bg-black/[0.02]"
+            style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
             onClick={addSegment}
           >
             + Add Another Segment
           </button>
-        </fieldset>
+        </section>
 
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
+          paymentStatus={paymentStatus}
+          onPaymentStatusChange={setPaymentStatus}
         />
 
-        <div className="flex justify-end gap-3 mt-6">
-          <button
-            type="button"
-            className="border px-5 py-2 rounded bg-white hover:bg-gray-100"
-            onClick={() => router.push("/portal/flight-bookings/manage")}
-            disabled={saving}
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            className="bg-blue-600 hover:bg-blue-700 text-white font-medium px-6 py-2 rounded shadow transition disabled:opacity-50"
-            disabled={saving}
-          >
-            {saving ? "Saving..." : "Create Booking"}
-          </button>
-        </div>
+        {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
+
+        <button
+          type="submit"
+          className="w-full rounded-lg py-3 text-white font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ backgroundColor: "var(--agency-color)" }}
+          disabled={saving}
+        >
+          {saving ? "Saving..." : "Save Flight Booking"}
+        </button>
       </form>
     </div>
   );
 }
-

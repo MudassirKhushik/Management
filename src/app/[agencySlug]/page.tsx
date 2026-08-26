@@ -1,5 +1,4 @@
 // src/app/[agencySlug]/page.tsx
-// Updated with proper client component and animations
 
 "use client";
 
@@ -36,6 +35,9 @@ type AgencyInfo = {
   city: string | null;
   primaryColor: string | null;
   logoUrl: string | null;
+  aboutImageUrl: string | null;
+  carousel: string[];
+  gallery: string[];
 };
 
 export default function HomePage() {
@@ -62,7 +64,7 @@ export default function HomePage() {
     loadPackages();
   }, [agencySlug]);
 
-  // Fetch agency info
+  // Fetch agency info — now includes aboutImageUrl, carousel, and gallery
   useEffect(() => {
     async function loadAgency() {
       try {
@@ -98,8 +100,15 @@ export default function HomePage() {
           }
         `}</style>
 
-        {/* Section 1: Hero Carousel */}
-        <HeroCarousel agency={agency} slides={CAROUSEL_SLIDES} services={SERVICES} />
+        {/* Section 1: Hero Carousel — real uploaded images take priority over
+            the CAROUSEL_SLIDES config fallback, matching HeroCarousel's own
+            internal logic. */}
+        <HeroCarousel
+          agency={agency}
+          slides={CAROUSEL_SLIDES}
+          services={SERVICES}
+          carouselImages={agency?.carousel || []}
+        />
 
         {/* Section 2: Packages */}
         <PackagesSection 
@@ -115,7 +124,7 @@ export default function HomePage() {
         <AboutSection agency={agency} />
 
         {/* Section 5: Memories */}
-        <MemoriesSection />
+        <MemoriesSection images={agency?.gallery || []} />
 
         {/* Section 6: Hype Wall */}
         <HypeWallSection />

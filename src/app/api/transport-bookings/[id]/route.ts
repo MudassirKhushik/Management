@@ -62,6 +62,8 @@ export async function PUT(request: Request, { params }: RouteParams) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
+        vendorName: body.vendorName || null,
+        paymentStatus: body.paymentStatus || "Pending",
         segments: {
           create: (body.segments || []).map((row: any) => ({
             vehicle: row.vehicle,
@@ -80,6 +82,35 @@ export async function PUT(request: Request, { params }: RouteParams) {
     return NextResponse.json(booking);
   } catch (error: any) {
     console.error("Error in transport-bookings PUT [id] route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
+  }
+}
+
+// PATCH: quick single-field update (Manage page's inline Payment Status dropdown)
+export async function PATCH(request: Request, { params }: RouteParams) {
+  try {
+    const { id } = await params;
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const existing = await prisma.transportBooking.findUnique({ where: { id } });
+    if (!existing || existing.agencyId !== session.user.agencyId) {
+      return NextResponse.json({ error: "Not found" }, { status: 404 });
+    }
+
+    const body = await request.json();
+    const booking = await prisma.transportBooking.update({
+      where: { id },
+      data: {
+        ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
+      },
+    });
+
+    return NextResponse.json(booking);
+  } catch (error: any) {
+    console.error("Error in transport-bookings PATCH [id] route:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

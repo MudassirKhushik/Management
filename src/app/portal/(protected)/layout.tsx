@@ -1,5 +1,7 @@
 import { auth, signOut } from "../../../../auth";
 import { NavLink } from "@/src/components/portal/NavLink";
+import { PortalHeader } from "@/src/components/portal/PortalHeader";
+import { PortalFooter } from "@/src/components/portal/PortalFooter";
 import { AgencyThemeProvider } from "@/src/hooks/useAgencyTheme";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
@@ -15,7 +17,7 @@ export default async function PortalLayout({ children }: { children: React.React
 
   return (
     <AgencyThemeProvider agency={agency}>
-      <div className="flex min-h-screen">
+      <div className="flex min-h-screen" style={{ ["--agency-color" as string]: agency.primaryColor || "#D2232A" }}>
         <aside className="w-64 flex flex-col justify-between shrink-0 bg-[#0E0E0E] text-white">
           <div>
             <div className="px-6 pt-7 pb-5 flex items-center gap-3 border-b border-white/10">
@@ -65,8 +67,9 @@ export default async function PortalLayout({ children }: { children: React.React
               <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
                 Marketing &amp; Settings
               </p>
-              <NavLink href="/portal/packages/add" indent>Add Packages to Website</NavLink>
-              <NavLink href="/portal/packages/manage" indent>Manage Packages</NavLink>
+              <NavLink href="/portal/settings" indent>Agency Settings</NavLink>
+              <NavLink href="/portal/packages/add" indent>Add Website Package</NavLink>
+              <NavLink href="/portal/packages/manage" indent>Manage Website Packages</NavLink>
               <NavLink href="/portal/notifications" indent>Notifications</NavLink>
             </nav>
           </div>
@@ -85,7 +88,11 @@ export default async function PortalLayout({ children }: { children: React.React
             </form>
           )}
         </aside>
-        <main className="flex-1 bg-[#FAF9F6]">{children}</main>
+        <main className="flex-1 bg-[#FAF9F6] flex flex-col min-h-screen">
+          <PortalHeader />
+          <div className="flex-1">{children}</div>
+          <PortalFooter />
+        </main>
       </div>
     </AgencyThemeProvider>
   );

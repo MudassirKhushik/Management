@@ -1,12 +1,19 @@
 // src/components/agency/AboutSection.tsx
-// Updated with GSAP
+// Fixed: ScrollTrigger plugin was used but never registered in this file,
+// which threw a runtime error on every page load regardless of DB data —
+// that's what was showing up as the Next.js error counter. Also now shows
+// the agency's uploaded About Image (Settings page) instead of always
+// showing the logo.
 
 "use client";
 
 import { useEffect, useRef } from "react";
 import { Reveal } from "@/src/components/ui/Reveal";
 import { useAgencyTheme } from "@/src/hooks/useAgencyTheme";
-import { gsap } from "gsap";
+import gsap from "gsap";
+import { ScrollTrigger } from "gsap/ScrollTrigger";
+
+gsap.registerPlugin(ScrollTrigger);
 
 interface AgencyInfo {
   name: string;
@@ -14,6 +21,7 @@ interface AgencyInfo {
   city: string | null;
   primaryColor: string | null;
   logoUrl: string | null;
+  aboutImageUrl: string | null;
 }
 
 interface AboutSectionProps {
@@ -24,6 +32,10 @@ export function AboutSection({ agency }: AboutSectionProps) {
   const { primaryColor } = useAgencyTheme();
   const displayName = agency?.name || "";
   const logoRef = useRef<HTMLDivElement>(null);
+
+  // Prefer the dedicated About image; fall back to the logo, then a static
+  // placeholder, so the section never renders a broken image.
+  const displayImage = agency?.aboutImageUrl || agency?.logoUrl || "/logo.png";
 
   useEffect(() => {
     if (logoRef.current) {
@@ -85,8 +97,8 @@ export function AboutSection({ agency }: AboutSectionProps) {
               style={{ borderColor: primaryColor }}
             >
               <img
-                src={agency?.logoUrl || "/logo.png"}
-                alt={`${displayName} logo`}
+                src={displayImage}
+                alt={`${displayName} about`}
                 className="w-full"
               />
             </div>

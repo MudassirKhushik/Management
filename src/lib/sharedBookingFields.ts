@@ -30,7 +30,7 @@ export const emptyGlobalHeader: GlobalHeaderData = {
 };
 
 // Matches the PDF spec: USD, SAR, PKR, AED, EUR, GBP
-export const CURRENCIES = ["USD", "SAR", "PKR", "AED", "EUR", "GBP"] as const;
+export const CURRENCIES = ["PKR", "SAR", "USD", "AED", "EUR", "GBP"] as const;
 
 // ---------- Pricing & Profit footer ----------
 
