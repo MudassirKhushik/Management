@@ -3,7 +3,7 @@
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../auth";
 import { prisma } from "@/src/lib/prisma";
-import { supabaseAdmin, MEDIA_BUCKET } from "@/src/lib/supabaseStorage";
+import { getSupabaseAdmin, MEDIA_BUCKET } from "@/src/lib/supabaseStorage";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -24,6 +24,7 @@ export async function DELETE(request: Request, { params }: RouteParams) {
   // is a minor cleanup issue, not a correctness one, and shouldn't block
   // the user from removing the image from their site.
   try {
+    const supabaseAdmin = getSupabaseAdmin();
     const marker = `/object/public/${MEDIA_BUCKET}/`;
     const idx = existing.url.indexOf(marker);
     if (idx !== -1) {

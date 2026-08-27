@@ -1,7 +1,9 @@
 // src/components/settings/SingleImageUploader.tsx
 //
-// Shared by Logo and About sections — each holds exactly one image, stored
-// directly on the Agency row (logoUrl / aboutImageUrl), not in Media.
+// Shared by Logo, About, and Package images. Logo/About are stored directly
+// on the Agency row (logoUrl / aboutImageUrl); Package images are stored on
+// the caller's own Package record — this component just gets the caller a
+// URL either way, via the same upload endpoint.
 
 "use client";
 
@@ -13,7 +15,7 @@ export default function SingleImageUploader({
   onChange,
   label,
 }: {
-  section: "logo" | "about";
+  section: "logo" | "about" | "package";
   currentUrl: string | null;
   onChange: (url: string) => void;
   label: string;

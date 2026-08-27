@@ -1,14 +1,15 @@
 // src/app/api/media/upload/route.ts
 //
-// Handles image uploads for all four settings sections. "logo" and "about"
-// update a single field directly on the Agency row. "carousel" and
-// "gallery" create a new Media row instead, since those sections hold
-// multiple images.
+// Handles image uploads for Settings sections ("logo"/"about" update a
+// single field on Agency; "carousel"/"gallery" create Media rows) AND for
+// individual Website Package images ("package" — just uploads and returns
+// a URL; the caller saves that URL onto their own Package record via the
+// existing /api/packages routes, same as the old URL-paste flow did).
 
 import { NextResponse } from "next/server";
 import { auth } from "../../../../../auth";
 import { prisma } from "@/src/lib/prisma";
-import { supabaseAdmin, MEDIA_BUCKET } from "@/src/lib/supabaseStorage";
+import { getSupabaseAdmin, MEDIA_BUCKET } from "@/src/lib/supabaseStorage";
 
 const MAX_FILE_BYTES = 1 * 1024 * 1024; // 1MB
 const SECTION_LIMITS: Record<string, number> = {
@@ -31,7 +32,7 @@ export async function POST(request: Request) {
     return NextResponse.json({ error: "Missing file or section." }, { status: 400 });
   }
 
-  if (!["carousel", "gallery", "logo", "about"].includes(section)) {
+  if (!["carousel", "gallery", "logo", "about", "package"].includes(section)) {
     return NextResponse.json({ error: "Invalid section." }, { status: 400 });
   }
 
@@ -44,7 +45,9 @@ export async function POST(request: Request) {
   }
 
   // Enforce per-section max count BEFORE uploading, so a rejected request
-  // never leaves an orphaned file sitting in Storage.
+  // never leaves an orphaned file sitting in Storage. Package images aren't
+  // capped here — the 20-package limit is already enforced in the
+  // /api/packages POST route.
   if (section === "carousel" || section === "gallery") {
     const count = await prisma.media.count({ where: { agencyId, section } });
     if (count >= SECTION_LIMITS[section]) {
@@ -55,6 +58,14 @@ export async function POST(request: Request) {
         { status: 400 }
       );
     }
+  }
+
+  let supabaseAdmin;
+  try {
+    supabaseAdmin = getSupabaseAdmin();
+  } catch (err: any) {
+    console.error(err);
+    return NextResponse.json({ error: err.message }, { status: 500 });
   }
 
   const ext = (file.type.split("/")[1] || "jpg").replace("jpeg", "jpg");
@@ -82,6 +93,12 @@ export async function POST(request: Request) {
       data: section === "logo" ? { logoUrl: publicUrl } : { aboutImageUrl: publicUrl },
     });
     return NextResponse.json({ url: publicUrl, agency: updated });
+  }
+
+  if (section === "package") {
+    // No DB write here — the caller (Package Add/Edit page) saves this URL
+    // onto its own Package record via the existing /api/packages routes.
+    return NextResponse.json({ url: publicUrl });
   }
 
   // carousel / gallery — create a Media row, appended after the current max position

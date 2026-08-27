@@ -4,6 +4,7 @@
 
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
+import SingleImageUploader from "@/src/components/settings/SingleImageUploader";
 
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
@@ -94,11 +95,12 @@ export default function EditPackagePage() {
               />
             </div>
             <div>
-              <label className={labelClass}>Image URL</label>
-              <input
-                className={inputClass}
-                value={imageUrl}
-                onChange={(e) => setImageUrl(e.target.value)}
+              <label className={labelClass}>Package Image</label>
+              <SingleImageUploader
+                section="package"
+                currentUrl={imageUrl || null}
+                label="Package"
+                onChange={(url) => setImageUrl(url)}
               />
             </div>
           </div>
