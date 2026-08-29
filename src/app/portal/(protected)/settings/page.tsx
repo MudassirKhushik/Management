@@ -13,19 +13,24 @@ const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gra
 
 type MediaItem = { id: string; url: string };
 
+type BankAccount = {
+  id: string;
+  accountName: string | null;
+  bankName: string | null;
+  accountNo: string | null;
+  iban: string | null;
+  address: string | null;
+};
+
 type Settings = {
   name: string;
   logoUrl: string | null;
   aboutImageUrl: string | null;
   primaryColor: string | null;
-  bankAccountName: string | null;
-  bankName: string | null;
-  bankAccountNo: string | null;
-  bankIban: string | null;
-  bankAddress: string | null;
   cancellationPolicy: string | null;
   noShowPolicy: string | null;
   importantContact: string | null;
+  bankAccounts: BankAccount[];
   carousel: MediaItem[];
   gallery: MediaItem[];
   packageCount: number;
@@ -43,6 +48,120 @@ function SectionCard({ title, children }: { title: string; children: React.React
   );
 }
 
+function BankAccountCard({
+  account,
+  index,
+  onSaved,
+  onDeleted,
+}: {
+  account: BankAccount;
+  index: number;
+  onSaved: (updated: BankAccount) => void;
+  onDeleted: (id: string) => void;
+}) {
+  const [form, setForm] = useState(account);
+  const [saving, setSaving] = useState(false);
+  const [deleting, setDeleting] = useState(false);
+  const [saved, setSaved] = useState(false);
+
+  function update(field: keyof BankAccount, value: string) {
+    setForm((f) => ({ ...f, [field]: value }));
+    setSaved(false);
+  }
+
+  async function handleSave() {
+    setSaving(true);
+    try {
+      const res = await fetch(`/api/bank-accounts/${account.id}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          accountName: form.accountName,
+          bankName: form.bankName,
+          accountNo: form.accountNo,
+          iban: form.iban,
+          address: form.address,
+        }),
+      });
+      if (!res.ok) throw new Error("Failed to save");
+      const updated = await res.json();
+      onSaved(updated);
+      setSaved(true);
+    } catch (err) {
+      console.error(err);
+      alert("Could not save this bank account.");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  async function handleDelete() {
+    if (!confirm("Remove this bank account?")) return;
+    setDeleting(true);
+    try {
+      const res = await fetch(`/api/bank-accounts/${account.id}`, { method: "DELETE" });
+      if (!res.ok) throw new Error("Failed to delete");
+      onDeleted(account.id);
+    } catch (err) {
+      console.error(err);
+      alert("Could not remove this bank account.");
+      setDeleting(false);
+    }
+  }
+
+  return (
+    <div className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+      <div className="flex justify-between items-center mb-3">
+        <span className="text-sm font-semibold text-[#121212]">Account {index + 1}</span>
+        <button
+          type="button"
+          onClick={handleDelete}
+          disabled={deleting}
+          className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors disabled:opacity-50"
+        >
+          {deleting ? "Removing..." : "Remove"}
+        </button>
+      </div>
+
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
+        <div>
+          <label className={labelClass}>Account Name</label>
+          <input className={inputClass} value={form.accountName || ""} onChange={(e) => update("accountName", e.target.value)} />
+        </div>
+        <div>
+          <label className={labelClass}>Bank Name</label>
+          <input className={inputClass} value={form.bankName || ""} onChange={(e) => update("bankName", e.target.value)} />
+        </div>
+        <div>
+          <label className={labelClass}>Account Number</label>
+          <input className={inputClass} value={form.accountNo || ""} onChange={(e) => update("accountNo", e.target.value)} />
+        </div>
+        <div>
+          <label className={labelClass}>IBAN</label>
+          <input className={inputClass} value={form.iban || ""} onChange={(e) => update("iban", e.target.value)} />
+        </div>
+        <div className="sm:col-span-2">
+          <label className={labelClass}>Bank Address</label>
+          <input className={inputClass} value={form.address || ""} onChange={(e) => update("address", e.target.value)} />
+        </div>
+      </div>
+
+      <div className="flex items-center gap-3">
+        <button
+          type="button"
+          onClick={handleSave}
+          disabled={saving}
+          className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ backgroundColor: "var(--agency-color)" }}
+        >
+          {saving ? "Saving..." : "Save Account"}
+        </button>
+        {saved && <span className="text-xs font-medium text-emerald-600">Saved.</span>}
+      </div>
+    </div>
+  );
+}
+
 export default function AgencySettingsPage() {
   const [settings, setSettings] = useState<Settings | null>(null);
   const [loading, setLoading] = useState(true);
@@ -50,6 +169,7 @@ export default function AgencySettingsPage() {
   const [saveError, setSaveError] = useState("");
   const [saving, setSaving] = useState(false);
   const [saved, setSaved] = useState(false);
+  const [addingAccount, setAddingAccount] = useState(false);
 
   useEffect(() => {
     async function load() {
@@ -72,7 +192,32 @@ export default function AgencySettingsPage() {
     setSaved(false);
   }
 
-  async function handleSaveBankDetails(e: React.FormEvent) {
+  async function handleAddAccount() {
+    setAddingAccount(true);
+    try {
+      const res = await fetch("/api/bank-accounts", { method: "POST" });
+      if (!res.ok) throw new Error("Failed to create");
+      const account = await res.json();
+      setSettings((s) => (s ? { ...s, bankAccounts: [...s.bankAccounts, account] } : s));
+    } catch (err) {
+      console.error(err);
+      alert("Could not add a new bank account.");
+    } finally {
+      setAddingAccount(false);
+    }
+  }
+
+  function handleAccountSaved(updated: BankAccount) {
+    setSettings((s) =>
+      s ? { ...s, bankAccounts: s.bankAccounts.map((a) => (a.id === updated.id ? updated : a)) } : s
+    );
+  }
+
+  function handleAccountDeleted(id: string) {
+    setSettings((s) => (s ? { ...s, bankAccounts: s.bankAccounts.filter((a) => a.id !== id) } : s));
+  }
+
+  async function handleSavePolicies(e: React.FormEvent) {
     e.preventDefault();
     if (!settings) return;
     setSaving(true);
@@ -82,11 +227,6 @@ export default function AgencySettingsPage() {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          bankAccountName: settings.bankAccountName,
-          bankName: settings.bankName,
-          bankAccountNo: settings.bankAccountNo,
-          bankIban: settings.bankIban,
-          bankAddress: settings.bankAddress,
           cancellationPolicy: settings.cancellationPolicy,
           noShowPolicy: settings.noShowPolicy,
           importantContact: settings.importantContact,
@@ -96,7 +236,7 @@ export default function AgencySettingsPage() {
       setSaved(true);
     } catch (err) {
       console.error(err);
-      setSaveError("Could not save bank details. Please try again.");
+      setSaveError("Could not save policy details. Please try again.");
     } finally {
       setSaving(false);
     }
@@ -166,50 +306,36 @@ export default function AgencySettingsPage() {
           </div>
         </SectionCard>
 
-        <SectionCard title="Bank & Policy Details">
-          <form onSubmit={handleSaveBankDetails} className="space-y-4">
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <SectionCard title="Bank Accounts">
+          {settings.bankAccounts.length === 0 && (
+            <p className="text-sm text-gray-400 mb-3">No bank accounts added yet.</p>
+          )}
+          <div className="space-y-4">
+            {settings.bankAccounts.map((account, index) => (
+              <BankAccountCard
+                key={account.id}
+                account={account}
+                index={index}
+                onSaved={handleAccountSaved}
+                onDeleted={handleAccountDeleted}
+              />
+            ))}
+          </div>
+          <button
+            type="button"
+            onClick={handleAddAccount}
+            disabled={addingAccount}
+            className="w-full mt-4 rounded-lg border-2 border-dashed py-2.5 text-sm font-semibold transition-colors hover:bg-black/[0.02] disabled:opacity-50"
+            style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
+          >
+            {addingAccount ? "Adding..." : "+ Add Bank Account"}
+          </button>
+        </SectionCard>
+
+        <SectionCard title="Policies">
+          <form onSubmit={handleSavePolicies} className="space-y-4">
+            <div className="grid grid-cols-1 gap-3">
               <div>
-                <label className={labelClass}>Bank Account Name</label>
-                <input
-                  className={inputClass}
-                  value={settings.bankAccountName || ""}
-                  onChange={(e) => updateField("bankAccountName", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Bank Name</label>
-                <input
-                  className={inputClass}
-                  value={settings.bankName || ""}
-                  onChange={(e) => updateField("bankName", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Account Number</label>
-                <input
-                  className={inputClass}
-                  value={settings.bankAccountNo || ""}
-                  onChange={(e) => updateField("bankAccountNo", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>IBAN</label>
-                <input
-                  className={inputClass}
-                  value={settings.bankIban || ""}
-                  onChange={(e) => updateField("bankIban", e.target.value)}
-                />
-              </div>
-              <div className="sm:col-span-2">
-                <label className={labelClass}>Bank Address</label>
-                <input
-                  className={inputClass}
-                  value={settings.bankAddress || ""}
-                  onChange={(e) => updateField("bankAddress", e.target.value)}
-                />
-              </div>
-              <div className="sm:col-span-2">
                 <label className={labelClass}>Important Contact</label>
                 <input
                   className={inputClass}
@@ -218,7 +344,7 @@ export default function AgencySettingsPage() {
                   onChange={(e) => updateField("importantContact", e.target.value)}
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className={labelClass}>Cancellation Policy</label>
                 <textarea
                   className={inputClass}
@@ -227,7 +353,7 @@ export default function AgencySettingsPage() {
                   onChange={(e) => updateField("cancellationPolicy", e.target.value)}
                 />
               </div>
-              <div className="sm:col-span-2">
+              <div>
                 <label className={labelClass}>No-Show Policy</label>
                 <textarea
                   className={inputClass}
@@ -247,7 +373,7 @@ export default function AgencySettingsPage() {
               style={{ backgroundColor: "var(--agency-color)" }}
               disabled={saving}
             >
-              {saving ? "Saving..." : "Save Bank & Policy Details"}
+              {saving ? "Saving..." : "Save Policies"}
             </button>
           </form>
         </SectionCard>

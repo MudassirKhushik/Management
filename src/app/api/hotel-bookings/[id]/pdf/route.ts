@@ -1,9 +1,4 @@
 // src/app/api/hotel-bookings/[id]/pdf/route.ts
-//
-// GET /api/hotel-bookings/[id]/pdf?type=invoice   (default)
-// GET /api/hotel-bookings/[id]/pdf?type=voucher
-//
-// react-pdf needs Node APIs, not the Edge runtime — this line is required.
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
@@ -36,18 +31,19 @@ export async function GET(req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const agency = await prisma.agency.findUnique({ where: { id: session.user.agencyId } });
+  const agency = await prisma.agency.findUnique({
+    where: { id: session.user.agencyId },
+    include: { bankAccounts: { orderBy: { position: "asc" } } },
+  });
   if (!agency) {
     return NextResponse.json({ error: "Agency not found" }, { status: 404 });
   }
 
   try {
-    // FIX 1: Cast the dynamic element to 'any' to satisfy @react-pdf/renderer's strict Document element type
     const buffer = await renderToBuffer(
       React.createElement(HotelBookingDocument, { booking, agency, variant }) as any
     );
 
-    // FIX 2: Convert Node.js Buffer to a standard Web API Uint8Array for NextResponse compliance
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",

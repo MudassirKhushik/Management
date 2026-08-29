@@ -47,10 +47,13 @@ type AgencyData = {
   name: string;
   logoUrl: string | null;
   primaryColor: string | null;
-  bankAccountName: string | null;
-  bankName: string | null;
-  bankAccountNo: string | null;
-  bankIban: string | null;
+  bankAccounts: {
+    accountName: string | null;
+    bankName: string | null;
+    accountNo: string | null;
+    iban: string | null;
+    address: string | null;
+  }[];
   cancellationPolicy: string | null;
   noShowPolicy: string | null;
   importantContact: string | null;
@@ -252,10 +255,18 @@ export function FlightBookingDocument({
             <View style={styles.footerRow}>
               <View style={styles.footerCol}>
                 <Text style={styles.footerTitle}>Bank Details</Text>
-                {agency.bankAccountName && <Text style={styles.footerText}>Account Name: {agency.bankAccountName}</Text>}
-                {agency.bankName && <Text style={styles.footerText}>Bank: {agency.bankName}</Text>}
-                {agency.bankAccountNo && <Text style={styles.footerText}>Account No: {agency.bankAccountNo}</Text>}
-                {agency.bankIban && <Text style={styles.footerText}>IBAN: {agency.bankIban}</Text>}
+                {agency.bankAccounts.length === 0 && <Text style={styles.footerText}>—</Text>}
+                {agency.bankAccounts.map((acc, i) => (
+                  <View key={i} style={{ marginBottom: i < agency.bankAccounts.length - 1 ? 6 : 0 }}>
+                    {agency.bankAccounts.length > 1 && (
+                      <Text style={[styles.footerText, { fontFamily: "Helvetica-Bold" }]}>Account {i + 1}</Text>
+                    )}
+                    {acc.accountName && <Text style={styles.footerText}>Account Name: {acc.accountName}</Text>}
+                    {acc.bankName && <Text style={styles.footerText}>Bank: {acc.bankName}</Text>}
+                    {acc.accountNo && <Text style={styles.footerText}>Account No: {acc.accountNo}</Text>}
+                    {acc.iban && <Text style={styles.footerText}>IBAN: {acc.iban}</Text>}
+                  </View>
+                ))}
               </View>
               <View style={styles.footerCol}>
                 <Text style={styles.footerTitle}>Contact</Text>

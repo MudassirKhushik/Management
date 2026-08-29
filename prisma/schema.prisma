@@ -21,14 +21,11 @@ model Agency {
   aboutImageUrl String?
   media         Media[]
 
-  bankAccountName    String?
-  bankName           String?
-  bankAccountNo      String?
-  bankIban           String?
-  bankAddress        String?
   cancellationPolicy String?
   noShowPolicy       String?
   importantContact   String?
+
+  bankAccounts BankAccount[]
 
   users             User[]
   packageBookings   PackageBooking[]
@@ -38,6 +35,19 @@ model Agency {
   transportBookings TransportBooking[]
   flightBookings    FlightBooking[]
   visaBookings      VisaBooking[]
+}
+
+model BankAccount {
+  id          String   @id @default(cuid())
+  agencyId    String
+  agency      Agency   @relation(fields: [agencyId], references: [id])
+  accountName String?
+  bankName    String?
+  accountNo   String?
+  iban        String?
+  address     String?
+  position    Int      @default(0)
+  createdAt   DateTime @default(now())
 }
 
 model User {

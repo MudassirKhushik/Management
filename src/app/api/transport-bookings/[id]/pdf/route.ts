@@ -29,7 +29,10 @@ export async function GET(req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
   }
 
-  const agency = await prisma.agency.findUnique({ where: { id: session.user.agencyId } });
+  const agency = await prisma.agency.findUnique({
+    where: { id: session.user.agencyId },
+    include: { bankAccounts: { orderBy: { position: "asc" } } },
+  });
   if (!agency) {
     return NextResponse.json({ error: "Agency not found" }, { status: 404 });
   }

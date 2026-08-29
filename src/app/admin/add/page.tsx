@@ -3,6 +3,8 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 
+const BRAND = "#D2232A";
+
 export default function AddAgencyPage() {
   const router = useRouter();
   const [name, setName] = useState("");
@@ -120,7 +122,8 @@ export default function AddAgencyPage() {
         <button
           type="submit"
           disabled={loading}
-          className="bg-black text-white px-4 py-2 rounded w-full"
+          className="text-white px-4 py-2 rounded w-full font-semibold transition-opacity hover:opacity-90 disabled:opacity-50"
+          style={{ backgroundColor: BRAND }}
         >
           {loading ? "Creating..." : "Create Agency"}
         </button>

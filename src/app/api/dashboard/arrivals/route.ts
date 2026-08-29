@@ -2,9 +2,9 @@
 //
 // GET /api/dashboard/arrivals?range=today|tomorrow|upcoming
 //
-// "Arrivals" isn't one table — it's Hotel check-ins + Flight departures +
-// Transport pickups, pulled from BOTH standalone bookings AND the entries
-// nested inside Package Bookings, merged into one sorted list.
+// "Arrivals" isn't one table — it's Hotel check-ins AND check-outs + Flight
+// departures + Transport pickups, pulled from BOTH standalone bookings AND
+// the entries nested inside Package Bookings, merged into one sorted list.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
@@ -32,17 +32,19 @@ export async function GET(req: Request) {
   } else if (range === "tomorrow") {
     ({ start, end } = dayBounds(1));
   } else {
-    // upcoming — from the day after tomorrow, next 30 days
+    // upcoming — from the day after tomorrow, next 60 days
     start = dayBounds(2).start;
-    end = dayBounds(30).end;
+    end = dayBounds(60).end;
   }
 
   const events: any[] = [];
 
   try {
     const [
-      hotelEntries,
-      pkgHotelEntries,
+      hotelCheckIns,
+      pkgHotelCheckIns,
+      hotelCheckOuts,
+      pkgHotelCheckOuts,
       transportSegs,
       pkgTransportSegs,
       flightSegs,
@@ -54,6 +56,18 @@ export async function GET(req: Request) {
       }),
       prisma.hotelBookingEntry.findMany({
         where: { checkIn: { gte: start, lte: end }, packageBooking: { agencyId } },
+        include: { packageBooking: true },
+      }),
+      // Check-out — a separate query on the same table, matched on checkOut
+      // instead of checkIn. A booking can appear once for its check-in date
+      // and once (on a different day) for its check-out date — both are
+      // real, distinct events worth surfacing on the dashboard.
+      prisma.hotelBookingEntry.findMany({
+        where: { checkOut: { gte: start, lte: end }, hotelBooking: { agencyId } },
+        include: { hotelBooking: true },
+      }),
+      prisma.hotelBookingEntry.findMany({
+        where: { checkOut: { gte: start, lte: end }, packageBooking: { agencyId } },
         include: { packageBooking: true },
       }),
       prisma.transportSegment.findMany({
@@ -74,22 +88,43 @@ export async function GET(req: Request) {
       }),
     ]);
 
-    hotelEntries.forEach((e) => {
+    hotelCheckIns.forEach((e) => {
       events.push({
-        id: `hotel-${e.id}`,
+        id: `hotel-checkin-${e.id}`,
         type: "hotel",
-        guestName: e.hotelBooking?.guestName || "—",
+        guestName: `${e.hotelBooking?.guestName || "—"} (Check-In)`,
         date: e.checkIn,
         detail: `${e.hotelName}, ${e.city}`,
         href: `/portal/hotel-bookings/${e.hotelBookingId}/edit`,
       });
     });
-    pkgHotelEntries.forEach((e) => {
+    pkgHotelCheckIns.forEach((e) => {
       events.push({
-        id: `pkg-hotel-${e.id}`,
+        id: `pkg-hotel-checkin-${e.id}`,
         type: "hotel",
-        guestName: e.packageBooking?.guestName || "—",
+        guestName: `${e.packageBooking?.guestName || "—"} (Check-In)`,
         date: e.checkIn,
+        detail: `${e.hotelName}, ${e.city} (Package)`,
+        href: `/portal/travelers/${e.packageBookingId}/edit`,
+      });
+    });
+
+    hotelCheckOuts.forEach((e) => {
+      events.push({
+        id: `hotel-checkout-${e.id}`,
+        type: "hotel",
+        guestName: `${e.hotelBooking?.guestName || "—"} (Check-Out)`,
+        date: e.checkOut,
+        detail: `${e.hotelName}, ${e.city}`,
+        href: `/portal/hotel-bookings/${e.hotelBookingId}/edit`,
+      });
+    });
+    pkgHotelCheckOuts.forEach((e) => {
+      events.push({
+        id: `pkg-hotel-checkout-${e.id}`,
+        type: "hotel",
+        guestName: `${e.packageBooking?.guestName || "—"} (Check-Out)`,
+        date: e.checkOut,
         detail: `${e.hotelName}, ${e.city} (Package)`,
         href: `/portal/travelers/${e.packageBookingId}/edit`,
       });

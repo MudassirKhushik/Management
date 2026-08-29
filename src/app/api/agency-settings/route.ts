@@ -12,7 +12,10 @@ export async function GET() {
 
   const agency = await prisma.agency.findUnique({
     where: { id: session.user.agencyId },
-    include: { media: { orderBy: { position: "asc" } } },
+    include: {
+      media: { orderBy: { position: "asc" } },
+      bankAccounts: { orderBy: { position: "asc" } },
+    },
   });
   if (!agency) {
     return NextResponse.json({ error: "Not found" }, { status: 404 });
@@ -25,14 +28,10 @@ export async function GET() {
     logoUrl: agency.logoUrl,
     aboutImageUrl: agency.aboutImageUrl,
     primaryColor: agency.primaryColor,
-    bankAccountName: agency.bankAccountName,
-    bankName: agency.bankName,
-    bankAccountNo: agency.bankAccountNo,
-    bankIban: agency.bankIban,
-    bankAddress: agency.bankAddress,
     cancellationPolicy: agency.cancellationPolicy,
     noShowPolicy: agency.noShowPolicy,
     importantContact: agency.importantContact,
+    bankAccounts: agency.bankAccounts,
     carousel: agency.media.filter((m) => m.section === "carousel"),
     gallery: agency.media.filter((m) => m.section === "gallery"),
     packageCount,
@@ -40,8 +39,8 @@ export async function GET() {
   });
 }
 
-// PUT — bank/policy text fields only. Logo, About, Carousel, and Gallery
-// images go through /api/media/upload instead, since those involve files.
+// PUT — the singular policy fields only. Bank accounts now have their own
+// dedicated routes (/api/bank-accounts) since there can be several of them.
 export async function PUT(request: Request) {
   const session = await auth();
   if (!session?.user?.agencyId) {
@@ -52,11 +51,6 @@ export async function PUT(request: Request) {
   const updated = await prisma.agency.update({
     where: { id: session.user.agencyId },
     data: {
-      bankAccountName: body.bankAccountName || null,
-      bankName: body.bankName || null,
-      bankAccountNo: body.bankAccountNo || null,
-      bankIban: body.bankIban || null,
-      bankAddress: body.bankAddress || null,
       cancellationPolicy: body.cancellationPolicy || null,
       noShowPolicy: body.noShowPolicy || null,
       importantContact: body.importantContact || null,
