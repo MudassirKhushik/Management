@@ -151,7 +151,7 @@ export default function ViewPackageBookingPage() {
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--agency-color)" }}
+            style={{{ backgroundColor: "var(--agency-color)" }}}
           <a>
             Generate Invoice
           </a>
@@ -160,7 +160,7 @@ export default function ViewPackageBookingPage() {
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
-            style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
+            style={{{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}}
           <a>
             Generate Voucher
           </a>
