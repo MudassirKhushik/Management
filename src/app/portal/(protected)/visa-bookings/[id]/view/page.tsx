@@ -110,25 +110,29 @@ export default function ViewVisaBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-          
-            href={`/api/visa-bookings/${booking.id}/pdf?type=invoice`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--agency-color)" }}
-          <a>
-            Generate Invoice
-          </a>
-          
-            href={`/api/visa-bookings/${booking.id}/pdf?type=voucher`}
-            target="_blank"
-            rel="noopener noreferrer"
-            className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
-            style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-          <a>
-            Generate Voucher
-          </a>
-        </div>
+  {/* Generate Invoice Link */}
+  <a
+    href={`/api/visa-bookings/${booking.id}/pdf?type=invoice`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+    style={{ backgroundColor: "var(--agency-color)" }}
+  >
+    Generate Invoice
+  </a>
+
+  {/* Generate Voucher Link */}
+  <a
+    href={`/api/visa-bookings/${booking.id}/pdf?type=voucher`}
+    target="_blank"
+    rel="noopener noreferrer"
+    className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
+    style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
+  >
+    Generate Voucher
+  </a>
+</div>
+
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
