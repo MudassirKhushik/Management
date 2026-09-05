@@ -3,6 +3,9 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../../auth";
+import { buildSectionCreates } from "../route";
+import { getBookingNetTotal, updateBookingPaymentStatus } from "@/src/lib/paymentHelpers";
+import { sumPayments, computeAutoPaymentStatus } from "@/src/lib/pricingCalculations";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
@@ -16,19 +19,19 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const booking = await prisma.packageBooking.findUnique({
       where: { id },
-      include: {
-        hotels: true,
-        transportSegments: true,
-        flightSegments: true,
-        visaEntries: true,
-      },
+      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
     });
 
     if (!booking || booking.agencyId !== session.user.agencyId) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    return NextResponse.json(booking);
+    const paid = await prisma.payment.aggregate({
+      where: { bookingType: "package", bookingId: id, agencyId: session.user.agencyId },
+      _sum: { amount: true },
+    });
+
+    return NextResponse.json({ ...booking, totalPaid: paid._sum.amount || 0 });
   } catch (error: any) {
     console.error("Error in travelers GET [id] route:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
@@ -50,21 +53,15 @@ export async function PUT(request: Request, { params }: RouteParams) {
 
     const body = await request.json();
 
-    const hotels = Array.isArray(body.hotels) ? body.hotels : [];
-    const transports = Array.isArray(body.transports) ? body.transports : [];
-    const flights = Array.isArray(body.flights) ? body.flights : [];
-    const visas = Array.isArray(body.visas) ? body.visas : [];
-
-    if (hotels.length === 0 && transports.length === 0 && flights.length === 0 && visas.length === 0) {
+    if (body.includeHotels && (!body.exchangeRate || parseFloat(body.exchangeRate) <= 0)) {
       return NextResponse.json(
-        { error: "Add at least one item (hotel, transport, flight, or visa)." },
+        { error: "Exchange rate is required when the package includes hotels." },
         { status: 400 }
       );
     }
 
-    // Clear all previous line items across every service type before
-    // re-creating them — same "delete then recreate" pattern used by every
-    // other booking type's PUT route.
+    // Wipe all four section types, then recreate from the payload — same
+    // delete-and-recreate approach the standalone booking types use.
     await prisma.hotelBookingEntry.deleteMany({ where: { packageBookingId: id } });
     await prisma.transportSegment.deleteMany({ where: { packageBookingId: id } });
     await prisma.flightSegment.deleteMany({ where: { packageBookingId: id } });
@@ -78,122 +75,37 @@ export async function PUT(request: Request, { params }: RouteParams) {
         nationality: body.nationality,
         mobileNo: body.mobileNo || "",
         referenceNo: body.referenceNo || null,
-        currency: body.currency || "USD",
-
-        includeHotels: hotels.length > 0,
-        includeTransports: transports.length > 0,
-        includeFlights: flights.length > 0,
-        includeVisas: visas.length > 0,
-
+        currency: body.currency || "PKR",
+        exchangeRate: parseFloat(body.exchangeRate) || 1,
+        includeHotels: !!body.includeHotels,
+        includeTransports: !!body.includeTransports,
+        includeFlights: !!body.includeFlights,
+        includeVisas: !!body.includeVisas,
         discount: parseFloat(body.discount) || 0,
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
         vendorName: body.vendorName || null,
-        paymentStatus: body.paymentStatus || "Pending",
-
-        hotels: {
-          create: hotels.map((row: any) => ({
-            hotelName: row.hotelName,
-            city: row.city,
-            roomType: row.roomType,
-            checkIn: new Date(row.checkIn),
-            checkOut: new Date(row.checkOut),
-            rooms: Number(row.rooms) || 1,
-            adults: Number(row.adults) || 1,
-            children: Number(row.children) || 0,
-            infants: Number(row.infants) || 0,
-            mealPlan: row.mealPlan || null,
-            confirmationNo: row.confirmationNo || null,
-            buyingCostPerNight: parseFloat(row.buyingCostPerNight) || 0,
-            sellingPricePerNight: parseFloat(row.sellingPricePerNight) || 0,
-          })),
-        },
-
-        transportSegments: {
-          create: transports.map((row: any) => ({
-            vehicle: row.vehicle,
-            sector: row.sector,
-            pickupDate: new Date(row.pickupDate),
-            pickupTime: row.pickupTime,
-            qty: Number(row.qty) || 1,
-            buyingCost: parseFloat(row.buyingCost) || 0,
-            sellingPrice: parseFloat(row.sellingPrice) || 0,
-          })),
-        },
-
-        flightSegments: {
-          create: flights.map((row: any) => ({
-            airline: row.airline,
-            flightNo: row.flightNo,
-            pnr: row.pnr || null,
-            departureAirport: row.departureAirport,
-            arrivalAirport: row.arrivalAirport,
-            departureDateTime: new Date(`${row.departureDate}T${row.departureTime || "00:00"}:00`),
-            arrivalDateTime: new Date(`${row.arrivalDate || row.departureDate}T${row.arrivalTime || "00:00"}:00`),
-            travelClass: row.travelClass || null,
-            adults: Number(row.adults) || 1,
-            children: Number(row.children) || 0,
-            infants: Number(row.infants) || 0,
-            baggage: row.baggage || null,
-            buyingCost: parseFloat(row.buyingCost) || 0,
-            sellingPrice: parseFloat(row.sellingPrice) || 0,
-          })),
-        },
-
-        visaEntries: {
-          create: visas.map((row: any) => ({
-            visaCategory: row.visaCategory,
-            applicantName: row.applicantName,
-            passportNumber: row.passportNumber,
-            processingType: row.processingType || null,
-            submissionDate: row.submissionDate ? new Date(row.submissionDate) : null,
-            expiryDate: row.expiryDate ? new Date(row.expiryDate) : null,
-            buyingCost: parseFloat(row.buyingCost) || 0,
-            sellingPrice: parseFloat(row.sellingPrice) || 0,
-          })),
-        },
+        // paymentStatus deliberately NOT from the body — recomputed below.
+        ...buildSectionCreates(body),
       },
-      include: {
-        hotels: true,
-        transportSegments: true,
-        flightSegments: true,
-        visaEntries: true,
-      },
+      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
     });
+
+    // Editing sections/discount/VAT/exchangeRate changes Net Total, which
+    // changes what the same payments add up to. Re-derive or the badge goes
+    // stale until the next payment is recorded.
+    try {
+      const netTotal = await getBookingNetTotal("package", id);
+      const payments = await prisma.payment.findMany({ where: { bookingType: "package", bookingId: id } });
+      await updateBookingPaymentStatus("package", id, computeAutoPaymentStatus(sumPayments(payments), netTotal));
+    } catch (err) {
+      console.warn("Skipped payment-status recompute after edit:", (err as Error).message);
+    }
 
     return NextResponse.json(booking);
   } catch (error: any) {
     console.error("Error in travelers PUT [id] route:", error);
-    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
-  }
-}
-
-// PATCH: quick single-field update (Manage page's inline Payment Status dropdown)
-export async function PATCH(request: Request, { params }: RouteParams) {
-  try {
-    const { id } = await params;
-    const session = await auth();
-    if (!session || !session.user?.agencyId) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-    }
-
-    const existing = await prisma.packageBooking.findUnique({ where: { id } });
-    if (!existing || existing.agencyId !== session.user.agencyId) {
-      return NextResponse.json({ error: "Not found" }, { status: 404 });
-    }
-
-    const body = await request.json();
-    const booking = await prisma.packageBooking.update({
-      where: { id },
-      data: {
-        ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
-      },
-    });
-
-    return NextResponse.json(booking);
-  } catch (error: any) {
-    console.error("Error in travelers PATCH [id] route:", error);
     return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }
@@ -211,7 +123,11 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
+    // Entry rows cascade via their FKs; payments don't (loose pair), so
+    // clear those explicitly or they become orphans that still count.
+    await prisma.payment.deleteMany({ where: { bookingType: "package", bookingId: id } });
     await prisma.packageBooking.delete({ where: { id } });
+
     return NextResponse.json({ success: true });
   } catch (error: any) {
     console.error("Error in travelers DELETE [id] route:", error);

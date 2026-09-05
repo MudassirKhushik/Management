@@ -21,10 +21,13 @@ const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gra
 
 export default function AddHotelBookingPage() {
   const router = useRouter();
-  const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
+  const [header, setHeader] = useState<GlobalHeaderData>({ ...emptyGlobalHeader, currency: "SAR" });
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
   const [vendorName, setVendorName] = useState("");
   const [paymentStatus, setPaymentStatus] = useState("Pending");
+  const [exchangeRate, setExchangeRate] = useState("");
+  const [initialPaidAmount, setInitialPaidAmount] = useState("");
+  const [initialBankAccountId, setInitialBankAccountId] = useState("");
   const [hotels, setHotels] = useState<HotelRow[]>([emptyHotelRow()]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -49,14 +52,43 @@ export default function AddHotelBookingPage() {
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
     setError("");
+    if (!exchangeRate || parseFloat(exchangeRate) <= 0) {
+      setError("Exchange rate is required.");
+      return;
+    }
     setSaving(true);
     try {
       const res = await fetch("/api/hotel-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, hotels }),
+        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, exchangeRate, hotels }),
       });
       if (!res.ok) throw new Error("Server rejected the booking");
+      const newBooking = await res.json();
+
+      // Round 4: if staff entered a "Total Paid Amount" while creating this
+      // booking, record it as a real first payment now that the booking
+      // has an id. Not fatal if this fails — the booking itself is saved;
+      // the payment can always be added later from Edit.
+      const paidAmt = parseFloat(initialPaidAmount);
+      if (paidAmt > 0) {
+        try {
+          await fetch("/api/payments", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              bookingType: "hotel",
+              bookingId: newBooking.id,
+              amount: paidAmt,
+              paidOn: new Date().toISOString().slice(0, 10),
+              bankAccountId: initialBankAccountId || null,
+            }),
+          });
+        } catch (payErr) {
+          console.error("Booking saved, but the initial payment failed:", payErr);
+        }
+      }
+
       router.push("/portal/hotel-bookings/manage");
     } catch (err) {
       console.error(err);
@@ -89,6 +121,21 @@ export default function AddHotelBookingPage() {
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
             />
+          </div>
+          <div className="mt-3">
+            <label className={labelClass}>Exchange Rate (1 {header.currency || "SAR"} = ? PKR) *</label>
+            <input
+              type="number"
+              step="0.01"
+              className={inputClass}
+              placeholder="e.g. 75"
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              required
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Required — used to record this booking's revenue/profit in PKR for internal reporting.
+            </p>
           </div>
         </section>
 
@@ -235,30 +282,69 @@ export default function AddHotelBookingPage() {
                       onChange={(e) => updateHotelRow(row.id, "confirmationNo", e.target.value)}
                     />
                   </div>
-                  <div />
+                </div>
+
+                {/* Phase 1a: separate Adult / Child pricing, per person per night.
+                    Infants stay headcount-only — no price fields for them. */}
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mt-3 pt-3 border-t border-gray-100">
                   <div>
-                    <label className={labelClass}>Buying Cost (Per Night)</label>
+                    <label className={labelClass}>Adult Buying Price (Per Night)</label>
                     <input
                       type="number"
                       step="0.01"
                       className={inputClass}
-                      value={row.buyingCostPerNight}
-                      onChange={(e) => updateHotelRow(row.id, "buyingCostPerNight", parseFloat(e.target.value) || 0)}
+                      value={row.adultBuyingPricePerNight}
+                      onChange={(e) =>
+                        updateHotelRow(row.id, "adultBuyingPricePerNight", parseFloat(e.target.value) || 0)
+                      }
                       required
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>Selling Price (Per Night)</label>
+                    <label className={labelClass}>Adult Selling Price (Per Night)</label>
                     <input
                       type="number"
                       step="0.01"
                       className={inputClass}
-                      value={row.sellingPricePerNight}
-                      onChange={(e) => updateHotelRow(row.id, "sellingPricePerNight", parseFloat(e.target.value) || 0)}
+                      value={row.adultSellingPricePerNight}
+                      onChange={(e) =>
+                        updateHotelRow(row.id, "adultSellingPricePerNight", parseFloat(e.target.value) || 0)
+                      }
                       required
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Child Buying Price (Per Night)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={inputClass}
+                      value={row.childBuyingPricePerNight}
+                      onChange={(e) =>
+                        updateHotelRow(row.id, "childBuyingPricePerNight", parseFloat(e.target.value) || 0)
+                      }
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Child Selling Price (Per Night)</label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      className={inputClass}
+                      value={row.childSellingPricePerNight}
+                      onChange={(e) =>
+                        updateHotelRow(row.id, "childSellingPricePerNight", parseFloat(e.target.value) || 0)
+                      }
                     />
                   </div>
                 </div>
+
+                {row.checkIn && row.checkOut && (
+                  <p className="text-xs text-gray-400 mt-2">
+                    Line total — Buying: {calculateHotelEntryTotals(row).buyingTotal.toFixed(2)} · Selling:{" "}
+                    {calculateHotelEntryTotals(row).sellingTotal.toFixed(2)}
+                  </p>
+                )}
               </div>
             ))}
           </div>
@@ -278,8 +364,10 @@ export default function AddHotelBookingPage() {
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          paymentStatus={paymentStatus}
-          onPaymentStatusChange={setPaymentStatus}
+          initialPaidAmount={initialPaidAmount}
+          onInitialPaidAmountChange={setInitialPaidAmount}
+          initialBankAccountId={initialBankAccountId}
+          onInitialBankAccountIdChange={setInitialBankAccountId}
         />
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}

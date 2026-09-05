@@ -45,6 +45,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
     const body = await request.json();
 
+    if (!body.exchangeRate || parseFloat(body.exchangeRate) <= 0) {
+      return NextResponse.json({ error: "Exchange rate is required" }, { status: 400 });
+    }
+
     await prisma.hotelBookingEntry.deleteMany({ where: { hotelBookingId: id } });
 
     const booking = await prisma.hotelBooking.update({
@@ -62,6 +66,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         note: body.note || null,
         vendorName: body.vendorName || null,
         paymentStatus: body.paymentStatus || "Pending",
+        exchangeRate: parseFloat(body.exchangeRate) || 0,
         hotels: {
           create: (body.hotels || []).map((row: any) => ({
             hotelName: row.hotelName,
@@ -75,8 +80,11 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             infants: row.infants,
             mealPlan: row.mealPlan || null,
             confirmationNo: row.confirmationNo || null,
-            buyingCostPerNight: row.buyingCostPerNight,
-            sellingPricePerNight: row.sellingPricePerNight,
+            // Phase 1a — replaces buyingCostPerNight/sellingPricePerNight
+            adultBuyingPricePerNight: parseFloat(row.adultBuyingPricePerNight) || 0,
+            adultSellingPricePerNight: parseFloat(row.adultSellingPricePerNight) || 0,
+            childBuyingPricePerNight: parseFloat(row.childBuyingPricePerNight) || 0,
+            childSellingPricePerNight: parseFloat(row.childSellingPricePerNight) || 0,
           })),
         },
       },

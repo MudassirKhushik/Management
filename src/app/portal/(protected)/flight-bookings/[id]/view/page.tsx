@@ -5,9 +5,10 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import { calculateFlightSegmentTotals, sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 
-type SegmentEntry = {
+type SegmentRow = {
   id: string;
   airline: string;
   flightNo: string;
@@ -21,8 +22,13 @@ type SegmentEntry = {
   children: number;
   infants: number;
   baggage: string | null;
-  buyingCost: number;
-  sellingPrice: number;
+  passengerNames: string | null;
+  adultBuyingPricePerLeg: number;
+  adultSellingPricePerLeg: number;
+  childBuyingPricePerLeg: number;
+  childSellingPricePerLeg: number;
+  infantBuyingPricePerLeg: number;
+  infantSellingPricePerLeg: number;
 };
 
 type Booking = {
@@ -40,7 +46,7 @@ type Booking = {
   note: string | null;
   vendorName: string | null;
   createdAt: string;
-  segments: SegmentEntry[];
+  segments: SegmentRow[];
 };
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -50,6 +56,18 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
       <span className="text-sm font-medium text-[#121212] text-right">{value ?? "—"}</span>
     </div>
   );
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-GB", {
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function ViewFlightBookingPage() {
@@ -78,8 +96,9 @@ export default function ViewFlightBookingPage() {
   if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
   if (error || !booking) return <p className="p-6 text-red-600">{error || "Booking not found."}</p>;
 
+  const rowTotals = booking.segments.map((s) => calculateFlightSegmentTotals(s));
   const { grossBuying, grossSelling } = sumLineItems(
-    booking.segments.map((s) => ({ buyingCost: s.buyingCost, sellingPrice: s.sellingPrice }))
+    rowTotals.map((t) => ({ buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal }))
   );
   const totals = calculateFooterTotals({
     grossBuying,
@@ -114,22 +133,22 @@ export default function ViewFlightBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-          <a
+          
             href={`/api/flight-bookings/${booking.id}/pdf?type=invoice`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "var(--agency-color)" }}
-          >
+          <a>
             Generate Invoice
           </a>
-          <a
+          
             href={`/api/flight-bookings/${booking.id}/pdf?type=voucher`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
             style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-          >
+          <a>
             Generate Voucher
           </a>
         </div>
@@ -159,32 +178,45 @@ export default function ViewFlightBookingPage() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-          Flight Segments
+          Flights
         </h2>
         <div className="space-y-3">
-          {booking.segments.map((s) => (
-            <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-              <p className="text-sm font-semibold text-[#121212] mb-2">
-                {s.airline} {s.flightNo} — {s.departureAirport} → {s.arrivalAirport}
-              </p>
-              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
-                <span>Departs: {new Date(s.departureDateTime).toLocaleString()}</span>
-                <span>Arrives: {new Date(s.arrivalDateTime).toLocaleString()}</span>
-                <span>Class: {s.travelClass || "—"}</span>
-                <span>PNR: {s.pnr || "—"}</span>
-                <span>Adults: {s.adults}</span>
-                <span>Children: {s.children}</span>
-                <span>Infants: {s.infants}</span>
-                <span>Baggage: {s.baggage || "—"}</span>
-                <span>Buy Total: {s.buyingCost.toFixed(2)}</span>
-                <span>Sell Total: {s.sellingPrice.toFixed(2)}</span>
+          {booking.segments.map((s, i) => {
+            const names = (s.passengerNames || "").split("\n").filter(Boolean);
+            return (
+              <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                <p className="text-sm font-semibold text-[#121212] mb-2">
+                  Flight {i + 1} — {s.airline} {s.flightNo} ({s.departureAirport} → {s.arrivalAirport})
+                </p>
+                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                  <span>PNR: {s.pnr || "—"}</span>
+                  <span>Class: {s.travelClass || "—"}</span>
+                  <span>Departs: {fmtDateTime(s.departureDateTime)}</span>
+                  <span>Arrives: {fmtDateTime(s.arrivalDateTime)}</span>
+                  <span>Pax: {s.adults}A {s.children}C {s.infants}I</span>
+                  <span>Baggage: {s.baggage || "—"}</span>
+                  <span>Buy Total: {rowTotals[i].buyingTotal.toFixed(2)}</span>
+                  <span>Sell Total: {rowTotals[i].sellingTotal.toFixed(2)}</span>
+                </div>
+                {names.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+                      Passengers
+                    </p>
+                    <ol className="text-xs text-gray-600 space-y-0.5">
+                      {names.map((n, ni) => (
+                        <li key={ni}>{ni + 1}. {n}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
           Pricing Summary
         </h2>
@@ -195,6 +227,16 @@ export default function ViewFlightBookingPage() {
         <DetailRow label="Profit" value={totals.profit.toFixed(2)} />
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
+
+      {/* Read-only here by design — payments are only editable from
+          Edit/Manage, never from View. */}
+      <PaymentHistorySection
+        bookingType="flight"
+        bookingId={booking.id}
+        netTotal={totals.netTotal}
+        currency={booking.currency}
+        readOnly
+      />
     </div>
   );
 }

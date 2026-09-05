@@ -1,9 +1,27 @@
+import { cookies } from "next/headers";
 import { auth, signOut } from "../../../../auth";
 import { prisma } from "@/src/lib/prisma";
-import { NavLink } from "@/src/components/portal/NavLink";
 import { PortalHeader } from "@/src/components/portal/PortalHeader";
 import { PortalFooter } from "@/src/components/portal/PortalFooter";
 import { AgencyThemeProvider } from "@/src/hooks/useAgencyTheme";
+import SidebarShell from "@/src/components/portal/SidebarShell";
+import {
+  RailNavLink,
+  SidebarSectionLabel,
+  SidebarBrand,
+  SidebarLogoutButton,
+} from "@/src/components/portal/SidebarNav";
+import {
+  IconDashboard,
+  IconPackage,
+  IconHotel,
+  IconTransport,
+  IconFlight,
+  IconVisa,
+  IconMarketing,
+  IconSettings,
+  IconBell,
+} from "@/src/components/portal/NavIcons";
 
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
@@ -28,86 +46,97 @@ export default async function PortalLayout({ children }: { children: React.React
     logoUrl: dbAgency?.logoUrl || (session?.user as any)?.agencyLogoUrl || null,
   };
 
+  const cookieStore = await cookies();
+  const defaultCollapsed = cookieStore.get("sidebar-collapsed")?.value === "1";
+
+  const sidebar = (
+    <>
+      <SidebarBrand logoUrl={agency.logoUrl} name={agency.name} />
+
+      {/* The only part that scrolls, between the brand and the logout button */}
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col gap-1 py-5 px-3">
+        <RailNavLink href="/portal" icon={<IconDashboard />}>Dashboard</RailNavLink>
+
+        <SidebarSectionLabel>Master Operations</SidebarSectionLabel>
+        <RailNavLink href="/portal/travelers/add" icon={<IconPackage />} hideInRail>
+          Full Package Booking
+        </RailNavLink>
+        <RailNavLink href="/portal/travelers/manage" icon={<IconPackage />} indent>
+          Manage Packages
+        </RailNavLink>
+
+        <SidebarSectionLabel>Hotel</SidebarSectionLabel>
+        <RailNavLink href="/portal/hotel-bookings/add" icon={<IconHotel />} indent hideInRail>
+          Hotel Booking
+        </RailNavLink>
+        <RailNavLink href="/portal/hotel-bookings/manage" icon={<IconHotel />} indent>
+          Manage Hotels
+        </RailNavLink>
+
+        <SidebarSectionLabel>Transport</SidebarSectionLabel>
+        <RailNavLink href="/portal/transport-bookings/add" icon={<IconTransport />} indent hideInRail>
+          Transport Booking
+        </RailNavLink>
+        <RailNavLink href="/portal/transport-bookings/manage" icon={<IconTransport />} indent>
+          Manage Transport
+        </RailNavLink>
+
+        <SidebarSectionLabel>Flight</SidebarSectionLabel>
+        <RailNavLink href="/portal/flight-bookings/add" icon={<IconFlight />} indent hideInRail>
+          Flight Booking
+        </RailNavLink>
+        <RailNavLink href="/portal/flight-bookings/manage" icon={<IconFlight />} indent>
+          Manage Flights
+        </RailNavLink>
+
+        <SidebarSectionLabel>Visa</SidebarSectionLabel>
+        <RailNavLink href="/portal/visa-bookings/add" icon={<IconVisa />} indent hideInRail>
+          Visa Booking
+        </RailNavLink>
+        <RailNavLink href="/portal/visa-bookings/manage" icon={<IconVisa />} indent>
+          Manage Visas
+        </RailNavLink>
+
+        <SidebarSectionLabel>Marketing &amp; Settings</SidebarSectionLabel>
+        <RailNavLink href="/portal/settings" icon={<IconSettings />} indent>
+          Agency Settings
+        </RailNavLink>
+        <RailNavLink href="/portal/packages/add" icon={<IconMarketing />} indent hideInRail>
+          Add Website Package
+        </RailNavLink>
+        <RailNavLink href="/portal/packages/manage" icon={<IconMarketing />} indent>
+          Manage Website Packages
+        </RailNavLink>
+        <RailNavLink href="/portal/notifications" icon={<IconBell />} indent>
+          Notifications
+        </RailNavLink>
+      </nav>
+
+      {session && (
+        <form
+          action={async () => {
+            "use server";
+            await signOut({ redirectTo: "/portal/login" });
+          }}
+          className="px-6 py-5 border-t border-white/10 shrink-0"
+        >
+          <SidebarLogoutButton />
+        </form>
+      )}
+    </>
+  );
+
   return (
     <AgencyThemeProvider agency={agency}>
-      <div className="flex min-h-screen" style={{ ["--agency-color" as string]: agency.primaryColor || "#D2232A" }}>
-        <aside className="w-64 flex flex-col shrink-0 bg-[#0E0E0E] text-white sticky top-0 h-screen">
-          {/* Logo — fixed, never scrolls */}
-          <div className="px-6 pt-7 pb-5 flex items-center gap-3 border-b border-white/10 shrink-0">
-            {agency.logoUrl ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={agency.logoUrl} alt={agency.name} className="h-9 w-auto" />
-            ) : (
-              <h2 className="font-black uppercase text-lg tracking-tight leading-none">
-                {agency.name || "Portal"}
-              </h2>
-            )}
-          </div>
-
-          {/* Nav — the only part that scrolls, fills the space between logo and logout */}
-          <nav className="flex-1 overflow-y-auto flex flex-col gap-1 py-5 px-3">
-            <NavLink href="/portal">Dashboard</NavLink>
-
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
-              Master Operations
-            </p>
-            <NavLink href="/portal/travelers/add">Full Package Booking</NavLink>
-            <NavLink href="/portal/travelers/manage" indent>Manage Packages</NavLink>
-
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
-              Hotel
-            </p>
-            <NavLink href="/portal/hotel-bookings/add" indent>Hotel Booking</NavLink>
-            <NavLink href="/portal/hotel-bookings/manage" indent>Manage Hotels</NavLink>
-
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
-              Transport
-            </p>
-            <NavLink href="/portal/transport-bookings/add" indent>Transport Booking</NavLink>
-            <NavLink href="/portal/transport-bookings/manage" indent>Manage Transport</NavLink>
-
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
-              Flight
-            </p>
-            <NavLink href="/portal/flight-bookings/add" indent>Flight Booking</NavLink>
-            <NavLink href="/portal/flight-bookings/manage" indent>Manage Flights</NavLink>
-
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
-              Visa
-            </p>
-            <NavLink href="/portal/visa-bookings/add" indent>Visa Booking</NavLink>
-            <NavLink href="/portal/visa-bookings/manage" indent>Manage Visas</NavLink>
-
-            <p className="text-[10px] font-semibold uppercase tracking-[0.2em] px-4 pt-6 pb-2 text-[#8a8a8a]">
-              Marketing &amp; Settings
-            </p>
-            <NavLink href="/portal/settings" indent>Agency Settings</NavLink>
-            <NavLink href="/portal/packages/add" indent>Add Website Package</NavLink>
-            <NavLink href="/portal/packages/manage" indent>Manage Website Packages</NavLink>
-            <NavLink href="/portal/notifications" indent>Notifications</NavLink>
-          </nav>
-
-          {/* Logout — fixed, never scrolls */}
-          {session && (
-            <form
-              action={async () => {
-                "use server";
-                await signOut({ redirectTo: "/portal/login" });
-              }}
-              className="px-6 py-5 border-t border-white/10 shrink-0"
-            >
-              <button className="w-full text-left text-sm font-semibold text-[#D2232A] hover:text-white transition">
-                Log out
-              </button>
-            </form>
-          )}
-        </aside>
-        <main className="flex-1 bg-[#FAF9F6] flex flex-col min-h-screen">
-          <PortalHeader />
-          <div className="flex-1">{children}</div>
-          <PortalFooter />
-        </main>
-      </div>
+      <SidebarShell
+        defaultCollapsed={defaultCollapsed}
+        primaryColor={agency.primaryColor || "#D2232A"}
+        sidebar={sidebar}
+      >
+        <PortalHeader />
+        <div className="flex-1">{children}</div>
+        <PortalFooter />
+      </SidebarShell>
     </AgencyThemeProvider>
   );
 }

@@ -2,17 +2,47 @@
 //
 // Shared by every booking type — fixing the styling here fixes the
 // "Pricing & Profit" section everywhere at once.
+//
+// Round 3 changes (Item 2):
+// - Manual Payment Status select REMOVED. Status is now purely derived from
+//   the payment ledger's auto-flip logic (see paymentHelpers.ts) — no more
+//   double source of truth here.
+// - Total Paid / Remaining Balance added as READ-ONLY stat boxes. Pass
+//   `bookingId` (Edit page has one; Add page doesn't yet, so these read 0 /
+//   full amount there, which is correct — no payments can exist before the
+//   booking itself does).
+// - When Payment Type indicates "Bank", the agency's bank accounts are
+//   listed read-only underneath — informational (which account to tell the
+//   client to transfer into), not a selection that gets saved anywhere.
 
 "use client";
 
+import { useEffect, useState } from "react";
 import { FooterData, PAYMENT_TYPES } from "@/src/lib/sharedBookingFields";
-import { calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import { calculateFooterTotals, sumPayments, calculateRemainingBalance, remainingBalanceTier } from "@/src/lib/pricingCalculations";
 
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
 const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
 
-export const PAYMENT_STATUSES = ["Pending", "Paid", "Partially Paid", "Cancelled"];
+// Kept exported for backward compatibility with anything else that
+// references it — no longer rendered here, and "Cancelled" is gone
+// entirely (cancelling now means deleting the booking).
+export const PAYMENT_STATUSES = ["Pending", "Paid", "Partially Paid"];
+
+const TIER_CLASS: Record<string, string> = {
+  paid: "text-emerald-600",
+  partial: "text-amber-600",
+  unpaid: "text-red-600",
+  none: "text-[#121212]",
+};
+
+type BankAccount = {
+  id: string;
+  accountName: string | null;
+  bankName: string | null;
+  accountNo: string | null;
+};
 
 type Props = {
   value: FooterData;
@@ -20,18 +50,30 @@ type Props = {
   grossBuying: number;
   grossSelling: number;
   showProfit?: boolean;
-  // Optional and separate from FooterData on purpose — added without touching
-  // the shared type, so callers that don't pass it (e.g. Package Booking, if
-  // it doesn't need this) simply don't render the field.
-  paymentStatus?: string;
-  onPaymentStatusChange?: (value: string) => void;
+  // If provided (Edit page), Total Paid/Remaining are read-only, computed
+  // from the real payment ledger. Omit on Add — see the initialPaid* props
+  // below for the Add-mode equivalent.
+  bookingId?: string;
+  bookingType?: "hotel" | "transport" | "flight" | "visa" | "package";
+  // Add-mode only: lets staff record the FIRST payment while creating the
+  // booking itself, instead of having to save first then go add a payment
+  // separately. The parent page turns this into an actual Payment record
+  // right after the booking is created. Once bookingId exists (Edit), these
+  // are ignored in favor of the read-only computed values above.
+  initialPaidAmount?: string;
+  onInitialPaidAmountChange?: (value: string) => void;
+  initialBankAccountId?: string;
+  onInitialBankAccountIdChange?: (value: string) => void;
 };
 
-function StatBox({ label, value, accent = false }: { label: string; value: string; accent?: boolean }) {
+function StatBox({ label, value, accent = false, valueClassName = "" }: { label: string; value: string; accent?: boolean; valueClassName?: string }) {
   return (
     <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
       <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-0.5">{label}</p>
-      <p className="text-sm font-bold" style={accent ? { color: "var(--agency-color)" } : { color: "#121212" }}>
+      <p
+        className={`text-sm font-bold ${valueClassName}`}
+        style={!valueClassName && accent ? { color: "var(--agency-color)" } : !valueClassName ? { color: "#121212" } : undefined}
+      >
         {value}
       </p>
     </div>
@@ -44,15 +86,101 @@ export default function PricingFooterFields({
   grossBuying,
   grossSelling,
   showProfit = true,
-  paymentStatus,
-  onPaymentStatusChange,
+  bookingId,
+  bookingType = "hotel",
+  initialPaidAmount = "",
+  onInitialPaidAmountChange,
+  initialBankAccountId = "",
+  onInitialBankAccountIdChange,
 }: Props) {
+  const [bankAccounts, setBankAccounts] = useState<BankAccount[]>([]);
+  const [totalPaid, setTotalPaid] = useState(0);
+  const isAddMode = !bookingId;
+
+  // Edit mode only: quick "record a payment right here" control, separate
+  // from the read-only Total Paid/Remaining above — those stay exactly as
+  // they were, this just adds a fast way to update them without scrolling
+  // down to the full Payments ledger.
+  const [quickAmount, setQuickAmount] = useState("");
+  const [quickBankAccountId, setQuickBankAccountId] = useState("");
+  const [quickSaving, setQuickSaving] = useState(false);
+  const [quickError, setQuickError] = useState("");
+  const [quickSuccess, setQuickSuccess] = useState(false);
+
   const totals = calculateFooterTotals({
     grossBuying,
     grossSelling,
     discount: value.discount,
     vatPercent: value.vatPercent,
   });
+
+  const isBankPayment = (value.paymentType || "").toLowerCase().includes("bank");
+
+  useEffect(() => {
+    if (!isBankPayment) return;
+    fetch("/api/bank-accounts")
+      .then((res) => (res.ok ? res.json() : []))
+      .then(setBankAccounts)
+      .catch(() => {});
+  }, [isBankPayment]);
+
+  function refetchTotalPaid() {
+    if (!bookingId) return;
+    fetch(`/api/payments?bookingType=${bookingType}&bookingId=${bookingId}`)
+      .then((res) => (res.ok ? res.json() : []))
+      .then((payments) => setTotalPaid(sumPayments(payments)))
+      .catch(() => {});
+  }
+
+  useEffect(() => {
+    if (!bookingId) {
+      setTotalPaid(0);
+      return;
+    }
+    refetchTotalPaid();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [bookingId, bookingType]);
+
+  async function handleQuickAdd() {
+    setQuickError("");
+    setQuickSuccess(false);
+    const amt = parseFloat(quickAmount);
+    if (!amt || amt <= 0) {
+      setQuickError("Enter a valid amount.");
+      return;
+    }
+    setQuickSaving(true);
+    try {
+      const res = await fetch("/api/payments", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          bookingType,
+          bookingId,
+          amount: amt,
+          paidOn: new Date().toISOString().slice(0, 10),
+          bankAccountId: isBankPayment ? quickBankAccountId || null : null,
+        }),
+      });
+      if (!res.ok) throw new Error("Server rejected the payment");
+      setQuickAmount("");
+      setQuickBankAccountId("");
+      refetchTotalPaid(); // updates Total Paid + Remaining here immediately
+      setQuickSuccess(true);
+    } catch (err) {
+      console.error(err);
+      setQuickError("Could not record this payment.");
+    } finally {
+      setQuickSaving(false);
+    }
+  }
+
+  // Add mode: remaining is computed live from whatever the staff is typing
+  // into "Total Paid Amount" (not yet saved). Edit mode: from the real
+  // ledger fetched above (and refetched after a quick-add).
+  const effectivePaid = isAddMode ? parseFloat(initialPaidAmount) || 0 : totalPaid;
+  const remaining = Math.max(0, totals.netTotal - effectivePaid);
+  const tier = remainingBalanceTier(remaining, totals.netTotal);
 
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
@@ -66,7 +194,79 @@ export default function PricingFooterFields({
         <StatBox label="Tax Amount" value={totals.taxAmount.toFixed(2)} />
         <StatBox label="Net Total" value={totals.netTotal.toFixed(2)} accent />
         {showProfit && <StatBox label="Profit (Staff Only)" value={totals.profit.toFixed(2)} accent />}
+
+        {isAddMode ? (
+          // Add mode: staff can type the first payment right here — a real
+          // Payment record gets created right after the booking is saved.
+          <div className="rounded-lg bg-gray-50 border border-gray-100 px-3 py-2.5">
+            <label className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-0.5 block">
+              Total Paid Amount
+            </label>
+            <input
+              type="number"
+              step="0.01"
+              className="w-full bg-transparent text-sm font-bold text-[#121212] focus:outline-none"
+              placeholder="0.00"
+              value={initialPaidAmount}
+              onChange={(e) => onInitialPaidAmountChange?.(e.target.value)}
+            />
+          </div>
+        ) : (
+          <StatBox label="Total Paid" value={totalPaid.toFixed(2)} valueClassName="text-emerald-600" />
+        )}
+        <StatBox
+          label="Remaining"
+          value={tier === "paid" ? "Paid in full" : remaining.toFixed(2)}
+          valueClassName={TIER_CLASS[tier]}
+        />
       </div>
+
+      {/* Edit mode only: quick "record a payment" control — Total Paid and
+          Remaining above stay read-only exactly as before, this just gives
+          a fast way to update them without scrolling to the Payments
+          section further down the page. */}
+      {!isAddMode && (
+        <div className="mb-4 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
+            Record a Payment
+          </p>
+          <div className={`grid grid-cols-1 ${isBankPayment ? "sm:grid-cols-3" : "sm:grid-cols-2"} gap-2`}>
+            <input
+              type="number"
+              step="0.01"
+              className={inputClass}
+              placeholder="Amount received"
+              value={quickAmount}
+              onChange={(e) => setQuickAmount(e.target.value)}
+            />
+            {isBankPayment && (
+              <select
+                className={inputClass}
+                value={quickBankAccountId}
+                onChange={(e) => setQuickBankAccountId(e.target.value)}
+              >
+                <option value="">Select account</option>
+                {bankAccounts.map((acc) => (
+                  <option key={acc.id} value={acc.id}>
+                    {acc.bankName || acc.accountName || "Account"} {acc.accountNo ? `(${acc.accountNo})` : ""}
+                  </option>
+                ))}
+              </select>
+            )}
+            <button
+              type="button"
+              onClick={handleQuickAdd}
+              disabled={quickSaving}
+              className="rounded-lg py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+              style={{ backgroundColor: "var(--agency-color)" }}
+            >
+              {quickSaving ? "Adding..." : "Add Payment"}
+            </button>
+          </div>
+          {quickError && <p className="text-red-600 text-xs font-medium mt-2">{quickError}</p>}
+          {quickSuccess && <p className="text-emerald-600 text-xs font-medium mt-2">Payment recorded — totals updated above.</p>}
+        </div>
+      )}
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
         <div>
@@ -102,21 +302,34 @@ export default function PricingFooterFields({
             ))}
           </select>
         </div>
-        {onPaymentStatusChange && (
-          <div>
-            <label className={labelClass}>Payment Status</label>
+      </div>
+
+      {/* Item 2 (round 4): Add mode gets a real SELECT tied to the initial
+          payment. Edit mode's bank picker now lives in the "Record a
+          Payment" quick-add block above, so nothing duplicate here. */}
+      {isBankPayment && isAddMode && (
+        <div className="mb-3 rounded-lg border border-gray-100 bg-gray-50/60 p-3">
+          <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
+            Which account received this payment?
+          </p>
+          {bankAccounts.length === 0 ? (
+            <p className="text-xs text-gray-400">No bank accounts added yet — add one in Settings.</p>
+          ) : (
             <select
               className={inputClass}
-              value={paymentStatus || "Pending"}
-              onChange={(e) => onPaymentStatusChange(e.target.value)}
+              value={initialBankAccountId}
+              onChange={(e) => onInitialBankAccountIdChange?.(e.target.value)}
             >
-              {PAYMENT_STATUSES.map((status) => (
-                <option key={status} value={status}>{status}</option>
+              <option value="">Select account</option>
+              {bankAccounts.map((acc) => (
+                <option key={acc.id} value={acc.id}>
+                  {acc.bankName || acc.accountName || "Account"} {acc.accountNo ? `(${acc.accountNo})` : ""}
+                </option>
               ))}
             </select>
-          </div>
-        )}
-      </div>
+          )}
+        </div>
+      )}
 
       <div>
         <label className={labelClass}>Note</label>

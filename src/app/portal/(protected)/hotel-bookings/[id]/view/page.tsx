@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { calculateHotelEntryTotals, sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 
 type HotelEntry = {
   id: string;
@@ -20,8 +21,10 @@ type HotelEntry = {
   infants: number;
   mealPlan: string | null;
   confirmationNo: string | null;
-  buyingCostPerNight: number;
-  sellingPricePerNight: number;
+  adultBuyingPricePerNight: number;
+  adultSellingPricePerNight: number;
+  childBuyingPricePerNight: number;
+  childSellingPricePerNight: number;
 };
 
 type Booking = {
@@ -38,6 +41,7 @@ type Booking = {
   note: string | null;
   vendorName: string | null;
   createdAt: string;
+  exchangeRate: number; // Item 2 — for PKR-converted revenue/profit
   hotels: HotelEntry[];
 };
 
@@ -177,7 +181,9 @@ export default function ViewHotelBookingPage() {
                 <span>Infants: {h.infants}</span>
                 <span>Meal: {h.mealPlan || "—"}</span>
                 <span>Conf. No: {h.confirmationNo || "—"}</span>
-                <span>Buy Total: {h.buyingCostPerNight != null ? rowTotals[i].buyingTotal.toFixed(2) : "—"}</span>
+                <span>Adult Rate: {h.adultSellingPricePerNight.toFixed(2)}/night</span>
+                <span>Child Rate: {h.childSellingPricePerNight.toFixed(2)}/night</span>
+                <span>Buy Total: {rowTotals[i].buyingTotal.toFixed(2)}</span>
                 <span>Sell Total: {rowTotals[i].sellingTotal.toFixed(2)}</span>
               </div>
             </div>
@@ -185,17 +191,31 @@ export default function ViewHotelBookingPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
           Pricing Summary
         </h2>
         <DetailRow label="Gross Selling" value={totals.grossSelling.toFixed(2)} />
         <DetailRow label="Discount" value={booking.discount.toFixed(2)} />
         <DetailRow label="VAT %" value={`${booking.vatPercent}%`} />
-        <DetailRow label="Net Total" value={totals.netTotal.toFixed(2)} />
-        <DetailRow label="Profit" value={totals.profit.toFixed(2)} />
+        <DetailRow label={`Net Total (${booking.currency})`} value={totals.netTotal.toFixed(2)} />
+        <DetailRow label={`Profit (${booking.currency})`} value={totals.profit.toFixed(2)} />
+        <DetailRow label="Net Total (PKR, converted)" value={(totals.netTotal * (booking.exchangeRate || 1)).toFixed(2)} />
+        <DetailRow label="Profit (PKR, converted)" value={(totals.profit * (booking.exchangeRate || 1)).toFixed(2)} />
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
+
+      {/* Phase 1d/e: Payments section — add a payment, see history, running
+          Remaining Balance. Reused as-is by every later booking type. */}
+      {/* Item 3 (round 3): View page shows payment history read-only —
+          adding/removing payments now only happens from Edit or Manage. */}
+      <PaymentHistorySection
+        bookingType="hotel"
+        bookingId={booking.id}
+        netTotal={totals.netTotal}
+        currency={booking.currency}
+        readOnly
+      />
     </div>
   );
 }

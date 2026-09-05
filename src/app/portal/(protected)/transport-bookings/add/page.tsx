@@ -21,13 +21,17 @@ const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gra
 
 export default function AddTransportBookingPage() {
   const router = useRouter();
-  const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
+  const [header, setHeader] = useState<GlobalHeaderData>({ ...emptyGlobalHeader, currency: "PKR" });
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
   const [vendorName, setVendorName] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [segments, setSegments] = useState<TransportRow[]>([emptyTransportRow()]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Add-mode initial payment — becomes a real Payment row right after the
+  // booking is created.
+  const [initialPaidAmount, setInitialPaidAmount] = useState("");
+  const [initialBankAccountId, setInitialBankAccountId] = useState("");
 
   function updateRow(id: string, field: keyof TransportRow, value: string | number) {
     setSegments((rows) => rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
@@ -51,13 +55,38 @@ export default function AddTransportBookingPage() {
       const res = await fetch("/api/transport-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, segments }),
+        body: JSON.stringify({ ...header, ...footer, vendorName, segments }),
       });
-      if (!res.ok) throw new Error("Server rejected the booking");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Server rejected the booking");
+      }
+      const created = await res.json();
+
+      // Separate step: the booking must exist before a Payment can point at
+      // it. A failure here shouldn't lose the booking — it's already saved.
+      const paid = parseFloat(initialPaidAmount);
+      if (paid > 0) {
+        const payRes = await fetch("/api/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookingType: "transport",
+            bookingId: created.id,
+            amount: paid,
+            paidOn: new Date().toISOString().slice(0, 10),
+            bankAccountId: initialBankAccountId || null,
+          }),
+        });
+        if (!payRes.ok) {
+          alert("Booking saved, but the initial payment could not be recorded. Please add it from the Edit page.");
+        }
+      }
+
       router.push("/portal/transport-bookings/manage");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Could not save the booking. Please check the fields and try again.");
+      setError(err.message || "Could not save the booking. Please check the fields and try again.");
     } finally {
       setSaving(false);
     }
@@ -82,7 +111,7 @@ export default function AddTransportBookingPage() {
             <input
               type="text"
               className={inputClass}
-              placeholder="Who you bought this transport from (supplier, not the sales agent)"
+              placeholder="Who you booked this transport from (supplier, not the sales agent)"
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
             />
@@ -91,14 +120,14 @@ export default function AddTransportBookingPage() {
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Transport Segments
+            Transfers
           </h2>
 
           <div className="space-y-4">
             {segments.map((row, index) => (
               <div key={row.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm font-semibold text-[#121212]">Segment {index + 1}</span>
+                  <span className="text-sm font-semibold text-[#121212]">Transfer {index + 1}</span>
                   <button
                     type="button"
                     className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors"
@@ -115,17 +144,19 @@ export default function AddTransportBookingPage() {
                       className={inputClass}
                       value={row.vehicle}
                       onChange={(e) => updateRow(row.id, "vehicle", e.target.value)}
+                      required
                     >
-                      {VEHICLE_TYPES.map((type) => (
-                        <option key={type} value={type}>{type}</option>
+                      {VEHICLE_TYPES.map((v) => (
+                        <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Sector (e.g. Jeddah to Makkah)</label>
+                    <label className={labelClass}>Sector</label>
                     <input
                       type="text"
                       className={inputClass}
+                      placeholder="e.g. Jeddah to Makkah"
                       value={row.sector}
                       onChange={(e) => updateRow(row.id, "sector", e.target.value)}
                       required
@@ -148,22 +179,30 @@ export default function AddTransportBookingPage() {
                       className={inputClass}
                       value={row.pickupTime}
                       onChange={(e) => updateRow(row.id, "pickupTime", e.target.value)}
-                      required
                     />
                   </div>
                   <div>
                     <label className={labelClass}>Quantity</label>
                     <input
                       type="number"
-                      min={1}
+                      min="1"
                       className={inputClass}
                       value={row.qty}
                       onChange={(e) => updateRow(row.id, "qty", parseInt(e.target.value) || 1)}
                     />
                   </div>
-                  <div />
                   <div>
-                    <label className={labelClass}>Buying Cost (Total)</label>
+                    <label className={labelClass}>Driver Contact</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="Shown on the voucher only (optional)"
+                      value={row.driverContact}
+                      onChange={(e) => updateRow(row.id, "driverContact", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Total Buying Cost</label>
                     <input
                       type="number"
                       step="0.01"
@@ -174,7 +213,7 @@ export default function AddTransportBookingPage() {
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>Selling Price (Total)</label>
+                    <label className={labelClass}>Total Selling Price</label>
                     <input
                       type="number"
                       step="0.01"
@@ -195,7 +234,7 @@ export default function AddTransportBookingPage() {
             style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
             onClick={addRow}
           >
-            + Add Another Segment
+            + Add Another Transfer
           </button>
         </section>
 
@@ -204,8 +243,11 @@ export default function AddTransportBookingPage() {
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          paymentStatus={paymentStatus}
-          onPaymentStatusChange={setPaymentStatus}
+          bookingType="transport"
+          initialPaidAmount={initialPaidAmount}
+          onInitialPaidAmountChange={setInitialPaidAmount}
+          initialBankAccountId={initialBankAccountId}
+          onInitialBankAccountIdChange={setInitialBankAccountId}
         />
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}

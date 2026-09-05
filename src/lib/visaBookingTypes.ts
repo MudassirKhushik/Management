@@ -2,11 +2,12 @@
 
 export type VisaRow = {
   id: string; // local-only id (React key), not necessarily a saved database id
-  visaCategory: string; // e.g. "Saudi Umrah", "UK Tourist", "Schengen Business" — replaces old visaType
+  visaCategory: string;
   applicantName: string;
-  passportNumber: string; // NEW field this session, wasn't in the old schema at all
+  passportNumber: string;
+  companyName: string; // Phase 4a — applicant's employer, optional in the DB
   processingType: string;
-  submissionDate: string; // "YYYY-MM-DD" string, matches an <input type="date">
+  submissionDate: string; // "YYYY-MM-DD", matches an <input type="date">
   expiryDate: string;
   buyingCost: number;
   sellingPrice: number;
@@ -20,6 +21,7 @@ export function emptyVisaRow(): VisaRow {
     visaCategory: "",
     applicantName: "",
     passportNumber: "",
+    companyName: "",
     processingType: "",
     submissionDate: "",
     expiryDate: "",

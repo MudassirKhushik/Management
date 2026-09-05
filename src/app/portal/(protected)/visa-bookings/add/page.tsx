@@ -21,13 +21,17 @@ const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gra
 
 export default function AddVisaBookingPage() {
   const router = useRouter();
-  const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
+  const [header, setHeader] = useState<GlobalHeaderData>({ ...emptyGlobalHeader, currency: "PKR" });
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
   const [vendorName, setVendorName] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [entries, setEntries] = useState<VisaRow[]>([emptyVisaRow()]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
+  // Add-mode initial payment — turned into a real Payment row right after
+  // the booking is created (same flow as Hotel's add page).
+  const [initialPaidAmount, setInitialPaidAmount] = useState("");
+  const [initialBankAccountId, setInitialBankAccountId] = useState("");
 
   function updateRow(id: string, field: keyof VisaRow, value: string | number) {
     setEntries((rows) => rows.map((row) => (row.id === id ? { ...row, [field]: value } : row)));
@@ -51,12 +55,35 @@ export default function AddVisaBookingPage() {
       const res = await fetch("/api/visa-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, entries }),
+        body: JSON.stringify({ ...header, ...footer, vendorName, entries }),
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
         throw new Error(errorData.error || "Server rejected the booking");
       }
+      const created = await res.json();
+
+      // Initial payment is a separate step: the booking must exist before a
+      // Payment can point at it. Failure here shouldn't lose the booking —
+      // it's already saved, so we warn and move on rather than throwing.
+      const paid = parseFloat(initialPaidAmount);
+      if (paid > 0) {
+        const payRes = await fetch("/api/payments", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            bookingType: "visa",
+            bookingId: created.id,
+            amount: paid,
+            paidOn: new Date().toISOString().slice(0, 10),
+            bankAccountId: initialBankAccountId || null,
+          }),
+        });
+        if (!payRes.ok) {
+          alert("Booking saved, but the initial payment could not be recorded. Please add it from the Edit page.");
+        }
+      }
+
       router.push("/portal/visa-bookings/manage");
     } catch (err: any) {
       console.error(err);
@@ -144,6 +171,16 @@ export default function AddVisaBookingPage() {
                     />
                   </div>
                   <div>
+                    <label className={labelClass}>Company Name</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="Applicant's employer (optional)"
+                      value={row.companyName}
+                      onChange={(e) => updateRow(row.id, "companyName", e.target.value)}
+                    />
+                  </div>
+                  <div>
                     <label className={labelClass}>Processing Type</label>
                     <select
                       className={inputClass}
@@ -216,8 +253,11 @@ export default function AddVisaBookingPage() {
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          paymentStatus={paymentStatus}
-          onPaymentStatusChange={setPaymentStatus}
+          bookingType="visa"
+          initialPaidAmount={initialPaidAmount}
+          onInitialPaidAmountChange={setInitialPaidAmount}
+          initialBankAccountId={initialBankAccountId}
+          onInitialBankAccountIdChange={setInitialBankAccountId}
         />
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}

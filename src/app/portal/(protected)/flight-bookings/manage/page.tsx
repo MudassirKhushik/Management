@@ -2,17 +2,30 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import Link from "next/link";
-import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import {
+  calculateFlightSegmentTotals,
+  sumLineItems,
+  calculateFooterTotals,
+  remainingBalanceTier,
+} from "@/src/lib/pricingCalculations";
+import QuickPaymentForm, { QuickPaymentPayload } from "@/src/components/booking/QuickPaymentForm";
 
-type SegmentEntry = {
+type SegmentRow = {
   airline: string;
   flightNo: string;
   departureAirport: string;
   arrivalAirport: string;
-  buyingCost: number;
-  sellingPrice: number;
+  adults: number;
+  children: number;
+  infants: number;
+  adultBuyingPricePerLeg: number;
+  adultSellingPricePerLeg: number;
+  childBuyingPricePerLeg: number;
+  childSellingPricePerLeg: number;
+  infantBuyingPricePerLeg: number;
+  infantSellingPricePerLeg: number;
 };
 
 type FlightBookingWithSegments = {
@@ -26,15 +39,27 @@ type FlightBookingWithSegments = {
   discount: number;
   vatPercent: number;
   createdAt: string;
-  segments: SegmentEntry[];
+  segments: SegmentRow[];
+  totalPaid: number;
 };
 
-const PAYMENT_STATUSES = ["Pending", "Paid", "Partially Paid", "Cancelled"];
+// No "Cancelled" — cancelling a booking means deleting it.
 const STATUS_COLOR: Record<string, string> = {
   Pending: "bg-amber-50 text-amber-700 border-amber-200",
   Paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
   "Partially Paid": "bg-blue-50 text-blue-700 border-blue-200",
-  Cancelled: "bg-red-50 text-red-700 border-red-200",
+};
+const TIER_CLASS: Record<string, string> = {
+  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  partial: "bg-amber-50 text-amber-700 border-amber-200",
+  unpaid: "bg-red-50 text-red-700 border-red-200",
+  none: "bg-gray-50 text-gray-500 border-gray-200",
+};
+const TIER_FONT: Record<string, string> = {
+  paid: "text-xs font-medium",
+  partial: "text-xs font-semibold",
+  unpaid: "text-sm font-bold",
+  none: "text-xs font-medium",
 };
 
 function EyeIcon() {
@@ -79,6 +104,14 @@ function TicketIcon() {
     </svg>
   );
 }
+function CashIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="6" width="20" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function IconButton({
   href,
@@ -119,23 +152,25 @@ export default function ManageFlightBookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [paymentRowId, setPaymentRowId] = useState<string | null>(null);
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   useEffect(() => {
-    async function loadBookings() {
-      try {
-        const res = await fetch("/api/flight-bookings");
-        if (!res.ok) throw new Error("Failed to load");
-        const data = await res.json();
-        setBookings(data);
-      } catch (err) {
-        console.error(err);
-        setError("Could not load flight bookings. Please refresh the page.");
-      } finally {
-        setLoading(false);
-      }
-    }
     loadBookings();
   }, []);
+
+  async function loadBookings() {
+    try {
+      const res = await fetch("/api/flight-bookings");
+      if (!res.ok) throw new Error("Failed to load");
+      setBookings(await res.json());
+    } catch (err) {
+      console.error(err);
+      setError("Could not load flight bookings. Please refresh the page.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this flight booking?")) return;
@@ -149,18 +184,30 @@ export default function ManageFlightBookingsPage() {
     }
   }
 
-  async function handlePaymentStatusChange(id: string, newStatus: string) {
-    setBookings((rows) => rows.map((b) => (b.id === id ? { ...b, paymentStatus: newStatus } : b)));
+  // No manual status control — Pending/Partially Paid/Paid are always
+  // derived from payments received. Cancelling means deleting.
+
+  async function handleQuickPayment(bookingId: string, payload: QuickPaymentPayload) {
+    setPaymentSaving(true);
     try {
-      const res = await fetch(`/api/flight-bookings/${id}`, {
-        method: "PATCH",
+      const res = await fetch("/api/payments", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentStatus: newStatus }),
+        body: JSON.stringify({ bookingType: "flight", bookingId, ...payload }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) throw new Error("Server rejected the payment");
+
+      const updated = await fetch(`/api/flight-bookings/${bookingId}`);
+      if (updated.ok) {
+        const fresh = await updated.json();
+        setBookings((rows) => rows.map((b) => (b.id === bookingId ? { ...b, ...fresh } : b)));
+      }
+      setPaymentRowId(null);
     } catch (err) {
       console.error(err);
-      alert("Could not update payment status.");
+      alert("Could not record this payment.");
+    } finally {
+      setPaymentSaving(false);
     }
   }
 
@@ -176,12 +223,19 @@ export default function ManageFlightBookingsPage() {
       b.agentName.toLowerCase().includes(q) ||
       (b.vendorName || "").toLowerCase().includes(q) ||
       b.segments.some(
-        (s) => s.airline.toLowerCase().includes(q) || s.flightNo.toLowerCase().includes(q)
+        (s) =>
+          s.airline.toLowerCase().includes(q) ||
+          s.flightNo.toLowerCase().includes(q) ||
+          s.departureAirport.toLowerCase().includes(q) ||
+          s.arrivalAirport.toLowerCase().includes(q)
       )
     );
   });
 
   const maxSegments = Math.max(1, ...bookings.map((b) => b.segments.length));
+  // Guest + Phone + {maxSegments} + Net Total, Profit, Remaining, Vendor,
+  // Agent, Payment, Actions = maxSegments + 9.
+  const fullColSpan = maxSegments + 9;
 
   return (
     <div className="p-4 md:p-6">
@@ -199,7 +253,7 @@ export default function ManageFlightBookingsPage() {
       <div className="mb-4">
         <input
           type="text"
-          placeholder="Search by guest, phone, agent, vendor, airline, or flight number..."
+          placeholder="Search by guest, phone, agent, vendor, airline, flight no., or airport..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
           className="w-full max-w-md rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none"
@@ -214,11 +268,14 @@ export default function ManageFlightBookingsPage() {
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Phone</th>
               {Array.from({ length: maxSegments }).map((_, i) => (
                 <th key={i} className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">
-                  Segment {i + 1}
+                  Flight {i + 1}
                 </th>
               ))}
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Net Total</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Profit</th>
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">
+                Remaining ({filtered[0]?.currency || "PKR"})
+              </th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendor</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Agent</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Payment</th>
@@ -228,7 +285,10 @@ export default function ManageFlightBookingsPage() {
           <tbody>
             {filtered.map((booking) => {
               const { grossBuying, grossSelling } = sumLineItems(
-                booking.segments.map((s) => ({ buyingCost: s.buyingCost, sellingPrice: s.sellingPrice }))
+                booking.segments.map((s) => {
+                  const t = calculateFlightSegmentTotals(s);
+                  return { buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal };
+                })
               );
               const totals = calculateFooterTotals({
                 grossBuying,
@@ -236,68 +296,98 @@ export default function ManageFlightBookingsPage() {
                 discount: booking.discount,
                 vatPercent: booking.vatPercent,
               });
+              // Flight is priced in the booking's own currency (PKR by
+              // default) — no exchangeRate conversion like Hotel needs.
+              const remaining = Math.max(0, totals.netTotal - (booking.totalPaid || 0));
+              const tier = remainingBalanceTier(remaining, totals.netTotal);
+              const isPaymentRowOpen = paymentRowId === booking.id;
 
               return (
-                <tr key={booking.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-[#121212]">{booking.guestName}</td>
-                  <td className="px-4 py-3 text-gray-600">{booking.mobileNo || "—"}</td>
-                  {Array.from({ length: maxSegments }).map((_, i) => (
-                    <td key={i} className="px-4 py-3 text-gray-600">
-                      {booking.segments[i]
-                        ? `${booking.segments[i].airline} ${booking.segments[i].flightNo} (${booking.segments[i].departureAirport}→${booking.segments[i].arrivalAirport})`
-                        : "—"}
+                <Fragment key={booking.id}>
+                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-[#121212]">{booking.guestName}</td>
+                    <td className="px-4 py-3 text-gray-600">{booking.mobileNo || "—"}</td>
+                    {Array.from({ length: maxSegments }).map((_, i) => (
+                      <td key={i} className="px-4 py-3 text-gray-600">
+                        {booking.segments[i]
+                          ? `${booking.segments[i].departureAirport} → ${booking.segments[i].arrivalAirport} (${booking.segments[i].flightNo})`
+                          : "—"}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 font-semibold text-[#121212]">{totals.netTotal.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-emerald-600 font-medium">{totals.profit.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
+                        className={`rounded-full border px-2.5 py-1 ${TIER_CLASS[tier]} ${TIER_FONT[tier]}`}
+                        title="Click to record a payment"
+                      >
+                        {tier === "paid" ? "Paid" : remaining.toFixed(2)}
+                      </button>
                     </td>
-                  ))}
-                  <td className="px-4 py-3 font-semibold text-[#121212]">{totals.netTotal.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-emerald-600 font-medium">{totals.profit.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={booking.paymentStatus || "Pending"}
-                      onChange={(e) => handlePaymentStatusChange(booking.id, e.target.value)}
-                      className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none ${
-                        STATUS_COLOR[booking.paymentStatus || "Pending"]
-                      }`}
-                    >
-                      {PAYMENT_STATUSES.map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <IconButton href={`/portal/flight-bookings/${booking.id}/view`} title="View">
-                        <EyeIcon />
-                      </IconButton>
-                      <IconButton href={`/portal/flight-bookings/${booking.id}/edit`} title="Edit">
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        href={`/api/flight-bookings/${booking.id}/pdf?type=invoice`}
-                        title="Generate Invoice"
-                        external
+                    <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${
+                          STATUS_COLOR[booking.paymentStatus || "Pending"]
+                        }`}
                       >
-                        <FileTextIcon />
-                      </IconButton>
-                      <IconButton
-                        href={`/api/flight-bookings/${booking.id}/pdf?type=voucher`}
-                        title="Generate Voucher"
-                        external
-                      >
-                        <TicketIcon />
-                      </IconButton>
-                      <IconButton onClick={() => handleDelete(booking.id)} title="Delete">
-                        <TrashIcon />
-                      </IconButton>
-                    </div>
-                  </td>
-                </tr>
+                        {booking.paymentStatus || "Pending"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <IconButton
+                          onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
+                          title="Record Payment"
+                        >
+                          <CashIcon />
+                        </IconButton>
+                        <IconButton href={`/portal/flight-bookings/${booking.id}/view`} title="View">
+                          <EyeIcon />
+                        </IconButton>
+                        <IconButton href={`/portal/flight-bookings/${booking.id}/edit`} title="Edit">
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          href={`/api/flight-bookings/${booking.id}/pdf?type=invoice`}
+                          title="Generate Invoice"
+                          external
+                        >
+                          <FileTextIcon />
+                        </IconButton>
+                        <IconButton
+                          href={`/api/flight-bookings/${booking.id}/pdf?type=voucher`}
+                          title="Generate Voucher"
+                          external
+                        >
+                          <TicketIcon />
+                        </IconButton>
+                        <IconButton onClick={() => handleDelete(booking.id)} title="Delete">
+                          <TrashIcon />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                  {isPaymentRowOpen && (
+                    <tr className="border-b border-gray-100 bg-gray-50/40">
+                      <td colSpan={fullColSpan} className="px-4 py-4">
+                        <QuickPaymentForm
+                          compact
+                          saving={paymentSaving}
+                          onSubmit={(payload) => handleQuickPayment(booking.id, payload)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
             {filtered.length === 0 && (
               <tr>
-                <td colSpan={maxSegments + 8} className="px-4 py-10 text-center text-gray-400">
+                <td colSpan={fullColSpan} className="px-4 py-10 text-center text-gray-400">
                   {search ? "No matches." : "No flight bookings yet."}
                 </td>
               </tr>

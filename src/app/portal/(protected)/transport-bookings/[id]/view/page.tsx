@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
+import { a } from "framer-motion/client";
 
 type SegmentRow = {
   id: string;
@@ -14,6 +16,7 @@ type SegmentRow = {
   pickupDate: string;
   pickupTime: string;
   qty: number;
+  driverContact: string | null;
   buyingCost: number;
   sellingPrice: number;
 };
@@ -107,22 +110,22 @@ export default function ViewTransportBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-          <a
+          
             href={`/api/transport-bookings/${booking.id}/pdf?type=invoice`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "var(--agency-color)" }}
-          >
+          <a>
             Generate Invoice
           </a>
-          <a
+          
             href={`/api/transport-bookings/${booking.id}/pdf?type=voucher`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
             style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-          >
+          <a>
             Generate Voucher
           </a>
         </div>
@@ -138,7 +141,7 @@ export default function ViewTransportBookingPage() {
           <DetailRow label="Reference No." value={booking.referenceNo} />
           <DetailRow label="Currency" value={booking.currency} />
           <DetailRow label="Payment Type" value={booking.paymentType} />
-          <DetailRow label="Payment Status" value={booking.paymentStatus} />
+          <DetailRow label="Payment Status" value={booking.paymentStatus || "Pending"} />
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
@@ -152,26 +155,29 @@ export default function ViewTransportBookingPage() {
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-          Transport Segments
+          Transfers
         </h2>
         <div className="space-y-3">
-          {booking.segments.map((s) => (
+          {booking.segments.map((s, i) => (
             <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-              <p className="text-sm font-semibold text-[#121212] mb-2">{s.sector}</p>
+              <p className="text-sm font-semibold text-[#121212] mb-2">
+                Transfer {i + 1} — {s.sector}
+              </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
                 <span>Vehicle: {s.vehicle}</span>
-                <span>Date: {s.pickupDate.slice(0, 10)}</span>
-                <span>Time: {s.pickupTime}</span>
+                <span>Date: {s.pickupDate ? s.pickupDate.slice(0, 10) : "—"}</span>
+                <span>Time: {s.pickupTime || "—"}</span>
                 <span>Qty: {s.qty}</span>
-                <span>Buying: {s.buyingCost.toFixed(2)}</span>
-                <span>Selling: {s.sellingPrice.toFixed(2)}</span>
+                <span>Driver: {s.driverContact || "—"}</span>
+                <span>Buy Total: {s.buyingCost.toFixed(2)}</span>
+                <span>Sell Total: {s.sellingPrice.toFixed(2)}</span>
               </div>
             </div>
           ))}
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
           Pricing Summary
         </h2>
@@ -182,6 +188,16 @@ export default function ViewTransportBookingPage() {
         <DetailRow label="Profit" value={totals.profit.toFixed(2)} />
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
+
+      {/* Read-only here by design — payments are only editable from
+          Edit/Manage, never from View. */}
+      <PaymentHistorySection
+        bookingType="transport"
+        bookingId={booking.id}
+        netTotal={totals.netTotal}
+        currency={booking.currency}
+        readOnly
+      />
     </div>
   );
 }

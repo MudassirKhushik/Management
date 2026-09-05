@@ -13,11 +13,17 @@ export type HotelRow = {
   infants: number;
   mealPlan: string;
   confirmationNo: string;
-  buyingCostPerNight: number;
-  sellingPricePerNight: number;
+
+  // --- Phase 1a: separate Adult/Child pricing, per person per night.
+  // Infants remain headcount-only — no pricing fields for them.
+  adultBuyingPricePerNight: number;
+  adultSellingPricePerNight: number;
+  childBuyingPricePerNight: number;
+  childSellingPricePerNight: number;
 };
 
-export const ROOM_TYPES = ["Single", "Double", "Triple", "Quad", "Quint Suite", "Family Room"];
+// "Sharing" is the only addition — everything else is unchanged.
+export const ROOM_TYPES = ["Single", "Double", "Triple", "Quad", "Quint Suite", "Family Room", "Sharing"];
 
 export const MEAL_PLANS = [
   { value: "RO", label: "RO (Room Only)" },
@@ -40,7 +46,9 @@ export function emptyHotelRow(): HotelRow {
     infants: 0,
     mealPlan: "",
     confirmationNo: "",
-    buyingCostPerNight: 0,
-    sellingPricePerNight: 0,
+    adultBuyingPricePerNight: 0,
+    adultSellingPricePerNight: 0,
+    childBuyingPricePerNight: 0,
+    childSellingPricePerNight: 0,
   };
 }

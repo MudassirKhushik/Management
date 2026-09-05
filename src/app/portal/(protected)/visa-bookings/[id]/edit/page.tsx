@@ -6,6 +6,7 @@ import { useEffect, useState } from "react";
 import { useRouter, useParams } from "next/navigation";
 import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
 import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 import {
   emptyGlobalHeader,
   emptyFooterData,
@@ -13,7 +14,7 @@ import {
   FooterData,
 } from "@/src/lib/sharedBookingFields";
 import { VisaRow, PROCESSING_TYPES, emptyVisaRow } from "@/src/lib/visaBookingTypes";
-import { sumLineItems } from "@/src/lib/pricingCalculations";
+import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
 
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
@@ -27,7 +28,6 @@ export default function EditVisaBookingPage() {
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
   const [vendorName, setVendorName] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("Pending");
   const [entries, setEntries] = useState<VisaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -55,13 +55,13 @@ export default function EditVisaBookingPage() {
           note: data.note || "",
         });
         setVendorName(data.vendorName || "");
-        setPaymentStatus(data.paymentStatus || "Pending");
         setEntries(
           data.entries.map((e: any) => ({
             id: e.id,
             visaCategory: e.visaCategory,
             applicantName: e.applicantName,
             passportNumber: e.passportNumber,
+            companyName: e.companyName || "",
             processingType: e.processingType || "",
             submissionDate: e.submissionDate ? e.submissionDate.slice(0, 10) : "",
             expiryDate: e.expiryDate ? e.expiryDate.slice(0, 10) : "",
@@ -92,6 +92,12 @@ export default function EditVisaBookingPage() {
   const { grossBuying, grossSelling } = sumLineItems(
     entries.map((row) => ({ buyingCost: row.buyingCost, sellingPrice: row.sellingPrice }))
   );
+  const totals = calculateFooterTotals({
+    grossBuying,
+    grossSelling,
+    discount: footer.discount,
+    vatPercent: footer.vatPercent,
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -101,7 +107,7 @@ export default function EditVisaBookingPage() {
       const res = await fetch(`/api/visa-bookings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, entries }),
+        body: JSON.stringify({ ...header, ...footer, vendorName, entries }),
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -196,6 +202,16 @@ export default function EditVisaBookingPage() {
                     />
                   </div>
                   <div>
+                    <label className={labelClass}>Company Name</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="Applicant's employer (optional)"
+                      value={row.companyName}
+                      onChange={(e) => updateRow(row.id, "companyName", e.target.value)}
+                    />
+                  </div>
+                  <div>
                     <label className={labelClass}>Processing Type</label>
                     <select
                       className={inputClass}
@@ -268,8 +284,8 @@ export default function EditVisaBookingPage() {
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          paymentStatus={paymentStatus}
-          onPaymentStatusChange={setPaymentStatus}
+          bookingId={id}
+          bookingType="visa"
         />
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
@@ -283,6 +299,17 @@ export default function EditVisaBookingPage() {
           {saving ? "Saving..." : "Save Changes"}
         </button>
       </form>
+
+      {/* Outside the <form> on purpose — PaymentHistorySection has its own
+          form inside it, and nested forms are invalid HTML. */}
+      <div className="mt-5">
+        <PaymentHistorySection
+          bookingType="visa"
+          bookingId={id}
+          netTotal={totals.netTotal}
+          currency={header.currency}
+        />
+      </div>
     </div>
   );
 }

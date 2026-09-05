@@ -16,27 +16,49 @@ type ArrivalEvent = {
   href: string;
 };
 
+// Hotel is the ONLY booking type priced in a foreign currency (SAR by
+// default), so it's the only one that gets an exchangeRate conversion.
+// Everything else is already in PKR and is summed as-is — do not apply a
+// rate to transport/flight/visa/package.
 function hotelBookingRevenue(b: any) {
   const rowTotals = (b.hotels || []).map((h: any) => calculateHotelEntryTotals(h));
   const { grossBuying, grossSelling } = sumLineItems(
     rowTotals.map((t: any) => ({ buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal }))
   );
-  return calculateFooterTotals({ grossBuying, grossSelling, discount: b.discount, vatPercent: b.vatPercent });
+  const totals = calculateFooterTotals({ grossBuying, grossSelling, discount: b.discount, vatPercent: b.vatPercent });
+
+  // Same conversion the Hotel Manage and View pages use, so the Dashboard
+  // agrees with them instead of quietly reporting SAR figures as PKR.
+  // Falls back to 1 for any legacy row without a rate.
+  const rate = b.exchangeRate || 1;
+  return { netTotal: totals.netTotal * rate, profit: totals.profit * rate };
 }
+
 function flatBookingRevenue(b: any, entries: any[]) {
   const { grossBuying, grossSelling } = sumLineItems(
     entries.map((e) => ({ buyingCost: e.buyingCost || 0, sellingPrice: e.sellingPrice || 0 }))
   );
   return calculateFooterTotals({ grossBuying, grossSelling, discount: b.discount, vatPercent: b.vatPercent });
 }
+
 function packageBookingRevenue(b: any) {
+  // Hotel entries inside a package use the same per-person/per-night math
+  // as standalone hotel bookings. This previously read the long-removed
+  // buyingCostPerNight/sellingPricePerNight columns, so every package's
+  // hotel portion silently counted as zero.
+  const hotelEntries = (b.hotels || []).map((h: any) => {
+    const t = calculateHotelEntryTotals(h);
+    return { buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal };
+  });
   const entries = [
-    ...(b.hotels || []).map((h: any) => ({ buyingCost: h.buyingCostPerNight, sellingPrice: h.sellingPricePerNight })),
+    ...hotelEntries,
     ...(b.transportSegments || []).map((t: any) => ({ buyingCost: t.buyingCost, sellingPrice: t.sellingPrice })),
     ...(b.flightSegments || []).map((f: any) => ({ buyingCost: f.buyingCost, sellingPrice: f.sellingPrice })),
     ...(b.visaEntries || []).map((v: any) => ({ buyingCost: v.buyingCost, sellingPrice: v.sellingPrice })),
   ];
   const { grossBuying, grossSelling } = sumLineItems(entries);
+  // PackageBooking has no exchangeRate column — it's priced in PKR
+  // throughout, so nothing to convert here.
   return calculateFooterTotals({ grossBuying, grossSelling, discount: b.discount, vatPercent: b.vatPercent });
 }
 
@@ -114,7 +136,6 @@ function ArrivalsWidget() {
             </button>
           ))}
         </div>
-        
       </div>
 
       <div className="p-4 max-h-96 overflow-y-auto">
@@ -264,6 +285,8 @@ function DashboardInner() {
     loadStats();
   }, []);
 
+  // Every figure below is PKR. Hotel is converted from SAR inside
+  // hotelBookingRevenue; the rest are already PKR.
   let totalRevenue = 0;
   let totalProfit = 0;
   try {

@@ -1,4 +1,3 @@
-// src/app/api/hotel-bookings/[id]/pdf/route.ts
 export const runtime = "nodejs";
 
 import { NextResponse } from "next/server";
@@ -7,10 +6,19 @@ import { auth } from "../../../../../../auth";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { HotelBookingDocument } from "@/src/lib/pdf/HotelBookingDocument";
 import React from "react";
+import QRCode from "qrcode";
 
 type RouteParams = {
   params: Promise<{ id: string }>;
 };
+
+// Use the origin of the incoming request as the QR's base, so the link
+// automatically matches whatever domain served the PDF (Vercel URL today,
+// custom domain later). NEXT_PUBLIC_BASE_URL wins if explicitly set.
+function resolveBaseUrl(reqUrl: string): string {
+  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
+  return new URL(reqUrl).origin;
+}
 
 export async function GET(req: Request, { params }: RouteParams) {
   const session = await auth();
@@ -39,9 +47,35 @@ export async function GET(req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Agency not found" }, { status: 404 });
   }
 
+  const payments = await prisma.payment.findMany({
+    where: { bookingType: "hotel", bookingId: id },
+    include: { bankAccount: true },
+    orderBy: { paidOn: "asc" },
+  });
+
+  // Voucher-only — it's the document the client physically carries. The QR
+  // points at the agency verification page, NOT at booking data: a lost
+  // voucher shouldn't expose a guest's itinerary to whoever picks it up.
+  // Same URL on every booking type's voucher.
+  let verifyQrDataUri: string | null = null;
+  if (variant === "voucher") {
+    try {
+      const verifyUrl = `${resolveBaseUrl(req.url)}/verify/${agency.slug}`;
+      verifyQrDataUri = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 200 });
+    } catch (err) {
+      console.error("Failed to generate verification QR code:", err);
+      // Not fatal — the voucher still renders, just without the QR block.
+    }
+  }
+
   try {
     const buffer = await renderToBuffer(
-      React.createElement(HotelBookingDocument, { booking, agency, variant }) as any
+      React.createElement(HotelBookingDocument, {
+        booking: { ...booking, payments },
+        agency,
+        variant,
+        verifyQrDataUri,
+      }) as any
     );
 
     return new NextResponse(new Uint8Array(buffer), {

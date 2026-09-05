@@ -1,162 +1,175 @@
 // src/app/api/travelers/route.ts
-// includeX booleans are derived server-side from whether each array actually
-// has rows — never trusted from the client. agencyId always from session.
+//
+// PackageBooking = the combined wizard. Section toggles decide which entry
+// types get rows; every entry model is shared with its standalone booking
+// via nullable dual FKs.
 
-import { prisma } from "@/src/lib/prisma";
 import { NextResponse } from "next/server";
+import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../auth";
 
 export async function GET() {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+  try {
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const bookings = await prisma.packageBooking.findMany({
+      where: { agencyId: session.user.agencyId },
+      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
+      orderBy: { createdAt: "desc" },
+    });
+
+    const grouped = await prisma.payment.groupBy({
+      by: ["bookingId"],
+      where: {
+        bookingType: "package",
+        agencyId: session.user.agencyId,
+        bookingId: { in: bookings.map((b) => b.id) },
+      },
+      _sum: { amount: true },
+    });
+    const paidMap = new Map(grouped.map((g) => [g.bookingId, g._sum.amount || 0]));
+
+    return NextResponse.json(bookings.map((b) => ({ ...b, totalPaid: paidMap.get(b.id) || 0 })));
+  } catch (error: any) {
+    console.error("Error on GET /api/travelers:", error);
+    return NextResponse.json([]);
   }
-
-  const bookings = await prisma.packageBooking.findMany({
-    where: { agencyId: session.user.agencyId },
-    include: {
-      hotels: true,
-      transportSegments: true,
-      flightSegments: true,
-      visaEntries: true,
-    },
-    orderBy: { createdAt: "desc" },
-  });
-
-  return NextResponse.json(bookings);
 }
 
-export async function POST(req: Request) {
-  const session = await auth();
-  if (!session?.user?.agencyId) {
-    return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
-  }
+// Shared by POST and PUT — the nested-create payload for all four sections.
+// Sections that are toggled off create nothing, so unchecking a box and
+// saving genuinely removes those rows.
+export function buildSectionCreates(body: any) {
+  return {
+    hotels: {
+      create: body.includeHotels
+        ? (body.hotels || []).map((row: any) => ({
+            hotelName: row.hotelName,
+            city: row.city,
+            roomType: row.roomType,
+            checkIn: new Date(row.checkIn),
+            checkOut: new Date(row.checkOut),
+            rooms: parseInt(row.rooms) || 1,
+            adults: parseInt(row.adults) || 1,
+            children: parseInt(row.children) || 0,
+            infants: parseInt(row.infants) || 0,
+            mealPlan: row.mealPlan || null,
+            confirmationNo: row.confirmationNo || null,
+            adultBuyingPricePerNight: parseFloat(row.adultBuyingPricePerNight) || 0,
+            adultSellingPricePerNight: parseFloat(row.adultSellingPricePerNight) || 0,
+            childBuyingPricePerNight: parseFloat(row.childBuyingPricePerNight) || 0,
+            childSellingPricePerNight: parseFloat(row.childSellingPricePerNight) || 0,
+          }))
+        : [],
+    },
+    transportSegments: {
+      create: body.includeTransports
+        ? (body.transportSegments || []).map((row: any) => ({
+            vehicle: row.vehicle,
+            sector: row.sector,
+            pickupDate: new Date(row.pickupDate),
+            pickupTime: row.pickupTime || "",
+            qty: parseInt(row.qty) || 1,
+            driverContact: row.driverContact || null,
+            buyingCost: parseFloat(row.buyingCost) || 0,
+            sellingPrice: parseFloat(row.sellingPrice) || 0,
+          }))
+        : [],
+    },
+    flightSegments: {
+      create: body.includeFlights
+        ? (body.flightSegments || []).map((row: any) => ({
+            airline: row.airline,
+            flightNo: row.flightNo,
+            pnr: row.pnr || null,
+            departureAirport: row.departureAirport,
+            arrivalAirport: row.arrivalAirport,
+            departureDateTime: new Date(row.departureDateTime),
+            arrivalDateTime: new Date(row.arrivalDateTime),
+            travelClass: row.travelClass || null,
+            adults: parseInt(row.adults) || 0,
+            children: parseInt(row.children) || 0,
+            infants: parseInt(row.infants) || 0,
+            baggage: row.baggage || null,
+            passengerNames: Array.isArray(row.passengerNames)
+              ? row.passengerNames.map((n: string) => n.trim()).filter(Boolean).join("\n") || null
+              : row.passengerNames || null,
+            adultBuyingPricePerLeg: parseFloat(row.adultBuyingPricePerLeg) || 0,
+            adultSellingPricePerLeg: parseFloat(row.adultSellingPricePerLeg) || 0,
+            childBuyingPricePerLeg: parseFloat(row.childBuyingPricePerLeg) || 0,
+            childSellingPricePerLeg: parseFloat(row.childSellingPricePerLeg) || 0,
+            infantBuyingPricePerLeg: parseFloat(row.infantBuyingPricePerLeg) || 0,
+            infantSellingPricePerLeg: parseFloat(row.infantSellingPricePerLeg) || 0,
+          }))
+        : [],
+    },
+    visaEntries: {
+      create: body.includeVisas
+        ? (body.visaEntries || []).map((row: any) => ({
+            visaCategory: row.visaCategory,
+            applicantName: row.applicantName,
+            passportNumber: row.passportNumber,
+            companyName: row.companyName || null,
+            processingType: row.processingType || null,
+            submissionDate: row.submissionDate ? new Date(row.submissionDate) : null,
+            expiryDate: row.expiryDate ? new Date(row.expiryDate) : null,
+            buyingCost: parseFloat(row.buyingCost) || 0,
+            sellingPrice: parseFloat(row.sellingPrice) || 0,
+          }))
+        : [],
+    },
+  };
+}
 
-  const body = await req.json();
-
-  const hotels = Array.isArray(body.hotels) ? body.hotels : [];
-  const transports = Array.isArray(body.transports) ? body.transports : [];
-  const flights = Array.isArray(body.flights) ? body.flights : [];
-  const visas = Array.isArray(body.visas) ? body.visas : [];
-
-  if (hotels.length === 0 && transports.length === 0 && flights.length === 0 && visas.length === 0) {
-    return NextResponse.json(
-      { error: "Add at least one item (hotel, transport, flight, or visa)." },
-      { status: 400 }
-    );
-  }
-
+export async function POST(request: Request) {
   try {
+    const session = await auth();
+    if (!session || !session.user?.agencyId) {
+      return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
+    }
+
+    const body = await request.json();
+
+    // Hotel rows are entered in SAR, so a package containing hotels needs a
+    // real rate or their contribution to the PKR total will be wrong.
+    if (body.includeHotels && (!body.exchangeRate || parseFloat(body.exchangeRate) <= 0)) {
+      return NextResponse.json(
+        { error: "Exchange rate is required when the package includes hotels." },
+        { status: 400 }
+      );
+    }
+
     const booking = await prisma.packageBooking.create({
       data: {
         agencyId: session.user.agencyId,
         agentName: body.agentName,
         guestName: body.guestName,
         nationality: body.nationality,
-        mobileNo: body.mobileNo,
+        mobileNo: body.mobileNo || "",
         referenceNo: body.referenceNo || null,
-        currency: body.currency || "USD",
-
-        includeHotels: hotels.length > 0,
-        includeTransports: transports.length > 0,
-        includeFlights: flights.length > 0,
-        includeVisas: visas.length > 0,
-
+        currency: body.currency || "PKR",
+        exchangeRate: parseFloat(body.exchangeRate) || 1,
+        includeHotels: !!body.includeHotels,
+        includeTransports: !!body.includeTransports,
+        includeFlights: !!body.includeFlights,
+        includeVisas: !!body.includeVisas,
         discount: parseFloat(body.discount) || 0,
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
         vendorName: body.vendorName || null,
-        paymentStatus: body.paymentStatus || "Pending",
-
-        hotels:
-          hotels.length > 0
-            ? {
-                create: hotels.map((row: any) => ({
-                  hotelName: row.hotelName,
-                  city: row.city,
-                  roomType: row.roomType,
-                  checkIn: new Date(row.checkIn),
-                  checkOut: new Date(row.checkOut),
-                  rooms: Number(row.rooms) || 1,
-                  adults: Number(row.adults) || 1,
-                  children: Number(row.children) || 0,
-                  infants: Number(row.infants) || 0,
-                  mealPlan: row.mealPlan || null,
-                  confirmationNo: row.confirmationNo || null,
-                  buyingCostPerNight: parseFloat(row.buyingCostPerNight) || 0,
-                  sellingPricePerNight: parseFloat(row.sellingPricePerNight) || 0,
-                })),
-              }
-            : undefined,
-
-        transportSegments:
-          transports.length > 0
-            ? {
-                create: transports.map((row: any) => ({
-                  vehicle: row.vehicle,
-                  sector: row.sector,
-                  pickupDate: new Date(row.pickupDate),
-                  pickupTime: row.pickupTime,
-                  qty: Number(row.qty) || 1,
-                  buyingCost: parseFloat(row.buyingCost) || 0,
-                  sellingPrice: parseFloat(row.sellingPrice) || 0,
-                })),
-              }
-            : undefined,
-
-        // Matches the standalone Flight rebuild: separate departure/arrival
-        // dates (not one shared "date"), departureAirport/arrivalAirport
-        // naming — full field parity with the standalone Flight form.
-        flightSegments:
-          flights.length > 0
-            ? {
-                create: flights.map((row: any) => ({
-                  airline: row.airline,
-                  flightNo: row.flightNo,
-                  pnr: row.pnr || null,
-                  departureAirport: row.departureAirport,
-                  arrivalAirport: row.arrivalAirport,
-                  departureDateTime: new Date(`${row.departureDate}T${row.departureTime || "00:00"}:00`),
-                  arrivalDateTime: new Date(`${row.arrivalDate || row.departureDate}T${row.arrivalTime || "00:00"}:00`),
-                  travelClass: row.travelClass || null,
-                  adults: Number(row.adults) || 1,
-                  children: Number(row.children) || 0,
-                  infants: Number(row.infants) || 0,
-                  baggage: row.baggage || null,
-                  buyingCost: parseFloat(row.buyingCost) || 0,
-                  sellingPrice: parseFloat(row.sellingPrice) || 0,
-                })),
-              }
-            : undefined,
-
-        visaEntries:
-          visas.length > 0
-            ? {
-                create: visas.map((row: any) => ({
-                  visaCategory: row.visaCategory,
-                  applicantName: row.applicantName,
-                  passportNumber: row.passportNumber,
-                  processingType: row.processingType || null,
-                  submissionDate: row.submissionDate ? new Date(row.submissionDate) : null,
-                  expiryDate: row.expiryDate ? new Date(row.expiryDate) : null,
-                  buyingCost: parseFloat(row.buyingCost) || 0,
-                  sellingPrice: parseFloat(row.sellingPrice) || 0,
-                })),
-              }
-            : undefined,
+        paymentStatus: "Pending",
+        ...buildSectionCreates(body),
       },
-      include: {
-        hotels: true,
-        transportSegments: true,
-        flightSegments: true,
-        visaEntries: true,
-      },
+      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
     });
 
-    return NextResponse.json(booking);
-  } catch (err: any) {
-    console.error("Critical error in package-booking POST route:", err);
-    return NextResponse.json({ error: err.message || "Could not create package booking." }, { status: 500 });
+    return NextResponse.json(booking, { status: 201 });
+  } catch (error: any) {
+    console.error("Error in travelers POST route:", error);
+    return NextResponse.json({ error: error.message || "Internal Server Error" }, { status: 500 });
   }
 }

@@ -3,9 +3,10 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import { useParams, useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
 import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 import {
   emptyGlobalHeader,
   emptyFooterData,
@@ -13,30 +14,30 @@ import {
   FooterData,
 } from "@/src/lib/sharedBookingFields";
 import { TransportRow, VEHICLE_TYPES, emptyTransportRow } from "@/src/lib/transportBookingTypes";
-import { sumLineItems } from "@/src/lib/pricingCalculations";
+import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
 
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
 const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
 
 export default function EditTransportBookingPage() {
-  const { id } = useParams<{ id: string }>();
   const router = useRouter();
+  const params = useParams();
+  const id = params.id as string;
 
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
   const [vendorName, setVendorName] = useState("");
-  const [paymentStatus, setPaymentStatus] = useState("Pending");
-  const [segments, setSegments] = useState<TransportRow[]>([emptyTransportRow()]);
+  const [segments, setSegments] = useState<TransportRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   useEffect(() => {
-    async function load() {
+    async function loadBooking() {
       try {
         const res = await fetch(`/api/transport-bookings/${id}`);
-        if (!res.ok) throw new Error("Not found");
+        if (!res.ok) throw new Error("Failed to load");
         const data = await res.json();
 
         setHeader({
@@ -54,15 +55,15 @@ export default function EditTransportBookingPage() {
           note: data.note || "",
         });
         setVendorName(data.vendorName || "");
-        setPaymentStatus(data.paymentStatus || "Pending");
         setSegments(
           data.segments.map((s: any) => ({
             id: s.id,
             vehicle: s.vehicle,
             sector: s.sector,
-            pickupDate: s.pickupDate.slice(0, 10),
-            pickupTime: s.pickupTime,
+            pickupDate: s.pickupDate ? s.pickupDate.slice(0, 10) : "",
+            pickupTime: s.pickupTime || "",
             qty: s.qty,
+            driverContact: s.driverContact || "",
             buyingCost: s.buyingCost,
             sellingPrice: s.sellingPrice,
           }))
@@ -74,7 +75,7 @@ export default function EditTransportBookingPage() {
         setLoading(false);
       }
     }
-    load();
+    loadBooking();
   }, [id]);
 
   function updateRow(rowId: string, field: keyof TransportRow, value: string | number) {
@@ -90,6 +91,12 @@ export default function EditTransportBookingPage() {
   const { grossBuying, grossSelling } = sumLineItems(
     segments.map((row) => ({ buyingCost: row.buyingCost, sellingPrice: row.sellingPrice }))
   );
+  const totals = calculateFooterTotals({
+    grossBuying,
+    grossSelling,
+    discount: footer.discount,
+    vatPercent: footer.vatPercent,
+  });
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -99,13 +106,16 @@ export default function EditTransportBookingPage() {
       const res = await fetch(`/api/transport-bookings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, paymentStatus, segments }),
+        body: JSON.stringify({ ...header, ...footer, vendorName, segments }),
       });
-      if (!res.ok) throw new Error("Server rejected the update");
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({}));
+        throw new Error(errorData.error || "Server rejected the update");
+      }
       router.push("/portal/transport-bookings/manage");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      setError("Could not save changes. Please check the fields and try again.");
+      setError(err.message || "Could not save changes. Please check the fields and try again.");
     } finally {
       setSaving(false);
     }
@@ -132,7 +142,7 @@ export default function EditTransportBookingPage() {
             <input
               type="text"
               className={inputClass}
-              placeholder="Who you bought this transport from (supplier, not the sales agent)"
+              placeholder="Who you booked this transport from (supplier, not the sales agent)"
               value={vendorName}
               onChange={(e) => setVendorName(e.target.value)}
             />
@@ -141,14 +151,14 @@ export default function EditTransportBookingPage() {
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Transport Segments
+            Transfers
           </h2>
 
           <div className="space-y-4">
             {segments.map((row, index) => (
               <div key={row.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
                 <div className="flex justify-between items-center mb-3">
-                  <span className="text-sm font-semibold text-[#121212]">Segment {index + 1}</span>
+                  <span className="text-sm font-semibold text-[#121212]">Transfer {index + 1}</span>
                   <button
                     type="button"
                     className="text-xs font-semibold text-red-500 hover:text-red-700 transition-colors"
@@ -165,17 +175,19 @@ export default function EditTransportBookingPage() {
                       className={inputClass}
                       value={row.vehicle}
                       onChange={(e) => updateRow(row.id, "vehicle", e.target.value)}
+                      required
                     >
-                      {VEHICLE_TYPES.map((type) => (
-                        <option key={type} value={type}>{type}</option>
+                      {VEHICLE_TYPES.map((v) => (
+                        <option key={v} value={v}>{v}</option>
                       ))}
                     </select>
                   </div>
                   <div>
-                    <label className={labelClass}>Sector (e.g. Jeddah to Makkah)</label>
+                    <label className={labelClass}>Sector</label>
                     <input
                       type="text"
                       className={inputClass}
+                      placeholder="e.g. Jeddah to Makkah"
                       value={row.sector}
                       onChange={(e) => updateRow(row.id, "sector", e.target.value)}
                       required
@@ -198,22 +210,30 @@ export default function EditTransportBookingPage() {
                       className={inputClass}
                       value={row.pickupTime}
                       onChange={(e) => updateRow(row.id, "pickupTime", e.target.value)}
-                      required
                     />
                   </div>
                   <div>
                     <label className={labelClass}>Quantity</label>
                     <input
                       type="number"
-                      min={1}
+                      min="1"
                       className={inputClass}
                       value={row.qty}
                       onChange={(e) => updateRow(row.id, "qty", parseInt(e.target.value) || 1)}
                     />
                   </div>
-                  <div />
                   <div>
-                    <label className={labelClass}>Buying Cost (Total)</label>
+                    <label className={labelClass}>Driver Contact</label>
+                    <input
+                      type="text"
+                      className={inputClass}
+                      placeholder="Shown on the voucher only (optional)"
+                      value={row.driverContact}
+                      onChange={(e) => updateRow(row.id, "driverContact", e.target.value)}
+                    />
+                  </div>
+                  <div>
+                    <label className={labelClass}>Total Buying Cost</label>
                     <input
                       type="number"
                       step="0.01"
@@ -224,7 +244,7 @@ export default function EditTransportBookingPage() {
                     />
                   </div>
                   <div>
-                    <label className={labelClass}>Selling Price (Total)</label>
+                    <label className={labelClass}>Total Selling Price</label>
                     <input
                       type="number"
                       step="0.01"
@@ -245,7 +265,7 @@ export default function EditTransportBookingPage() {
             style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
             onClick={addRow}
           >
-            + Add Another Segment
+            + Add Another Transfer
           </button>
         </section>
 
@@ -254,8 +274,8 @@ export default function EditTransportBookingPage() {
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          paymentStatus={paymentStatus}
-          onPaymentStatusChange={setPaymentStatus}
+          bookingId={id}
+          bookingType="transport"
         />
 
         {error && <p className="text-red-600 text-sm font-medium">{error}</p>}
@@ -269,6 +289,17 @@ export default function EditTransportBookingPage() {
           {saving ? "Saving..." : "Save Changes"}
         </button>
       </form>
+
+      {/* Outside the <form> — PaymentHistorySection has its own form inside
+          it, and nested forms are invalid HTML. */}
+      <div className="mt-5">
+        <PaymentHistorySection
+          bookingType="transport"
+          bookingId={id}
+          netTotal={totals.netTotal}
+          currency={header.currency}
+        />
+      </div>
     </div>
   );
 }

@@ -1,31 +1,37 @@
 // src/lib/flightBookingTypes.ts
 
-export type FlightSegment = {
+export type FlightRow = {
   id: string; // local-only id (React key), not necessarily a saved database id
   airline: string;
   flightNo: string;
   pnr: string;
   departureAirport: string;
   arrivalAirport: string;
-  departureDate: string; // "YYYY-MM-DD"
-  departureTime: string; // "HH:MM"
-  // Separate from departureDate on purpose — arrival can land the next
-  // calendar day (overnight/long-haul flights). The old single shared
-  // "date" field silently broke for exactly this case.
-  arrivalDate: string;
-  arrivalTime: string;
+  departureDateTime: string; // "YYYY-MM-DDTHH:mm", matches <input type="datetime-local">
+  arrivalDateTime: string;
   travelClass: string;
   adults: number;
   children: number;
   infants: number;
   baggage: string;
-  buyingCost: number;   // Total Buying Cost for this leg
-  sellingPrice: number; // Total Selling Price for this leg
+
+  // Held as an array in the form for the add/remove UI, then joined with
+  // newlines before it's sent to the API (stored as one text column).
+  passengerNames: string[];
+
+  // Per passenger, per leg. Infants DO get their own price here, unlike
+  // hotel where they're headcount-only.
+  adultBuyingPricePerLeg: number;
+  adultSellingPricePerLeg: number;
+  childBuyingPricePerLeg: number;
+  childSellingPricePerLeg: number;
+  infantBuyingPricePerLeg: number;
+  infantSellingPricePerLeg: number;
 };
 
 export const TRAVEL_CLASSES = ["Economy", "Premium Economy", "Business", "First Class"];
 
-export function emptyFlightSegment(): FlightSegment {
+export function emptyFlightRow(): FlightRow {
   return {
     id: crypto.randomUUID(),
     airline: "",
@@ -33,16 +39,19 @@ export function emptyFlightSegment(): FlightSegment {
     pnr: "",
     departureAirport: "",
     arrivalAirport: "",
-    departureDate: "",
-    departureTime: "",
-    arrivalDate: "",
-    arrivalTime: "",
+    departureDateTime: "",
+    arrivalDateTime: "",
     travelClass: TRAVEL_CLASSES[0],
     adults: 1,
     children: 0,
     infants: 0,
     baggage: "",
-    buyingCost: 0,
-    sellingPrice: 0,
+    passengerNames: [""],
+    adultBuyingPricePerLeg: 0,
+    adultSellingPricePerLeg: 0,
+    childBuyingPricePerLeg: 0,
+    childSellingPricePerLeg: 0,
+    infantBuyingPricePerLeg: 0,
+    infantSellingPricePerLeg: 0,
   };
 }

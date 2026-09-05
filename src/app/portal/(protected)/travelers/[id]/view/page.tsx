@@ -5,30 +5,14 @@
 import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
-import { sumLineItems, calculateFooterTotals, calculateHotelEntryTotals } from "@/src/lib/pricingCalculations";
-
-type HotelEntry = {
-  id: string; hotelName: string; city: string; roomType: string;
-  checkIn: string; checkOut: string; rooms: number; adults: number; children: number; infants: number;
-  mealPlan: string | null; confirmationNo: string | null;
-  buyingCostPerNight: number; sellingPricePerNight: number;
-};
-type TransportEntry = {
-  id: string; vehicle: string; sector: string; pickupDate: string; pickupTime: string;
-  qty: number; buyingCost: number; sellingPrice: number;
-};
-type FlightEntry = {
-  id: string; airline: string; flightNo: string; pnr: string | null;
-  departureAirport: string; arrivalAirport: string;
-  departureDateTime: string; arrivalDateTime: string;
-  travelClass: string | null; adults: number; children: number; infants: number; baggage: string | null;
-  buyingCost: number; sellingPrice: number;
-};
-type VisaEntry = {
-  id: string; visaCategory: string; applicantName: string; passportNumber: string;
-  processingType: string | null; submissionDate: string | null; expiryDate: string | null;
-  buyingCost: number; sellingPrice: number;
-};
+import {
+  calculateHotelEntryTotals,
+  calculateFlightSegmentTotals,
+  calculatePackageLineItems,
+  sumLineItems,
+  calculateFooterTotals,
+} from "@/src/lib/pricingCalculations";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 
 type Booking = {
   id: string;
@@ -38,17 +22,22 @@ type Booking = {
   mobileNo: string;
   referenceNo: string | null;
   currency: string;
+  exchangeRate: number;
   discount: number;
   vatPercent: number;
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
   vendorName: string | null;
+  includeHotels: boolean;
+  includeTransports: boolean;
+  includeFlights: boolean;
+  includeVisas: boolean;
   createdAt: string;
-  hotels: HotelEntry[];
-  transportSegments: TransportEntry[];
-  flightSegments: FlightEntry[];
-  visaEntries: VisaEntry[];
+  hotels: any[];
+  transportSegments: any[];
+  flightSegments: any[];
+  visaEntries: any[];
 };
 
 function DetailRow({ label, value }: { label: string; value: React.ReactNode }) {
@@ -58,6 +47,30 @@ function DetailRow({ label, value }: { label: string; value: React.ReactNode }) 
       <span className="text-sm font-medium text-[#121212] text-right">{value ?? "—"}</span>
     </div>
   );
+}
+
+function SectionBlock({ title, children }: { title: string; children: React.ReactNode }) {
+  return (
+    <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
+      <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
+        {title}
+      </h2>
+      <div className="space-y-3">{children}</div>
+    </div>
+  );
+}
+
+function fmtDateTime(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "—";
+  return d.toLocaleString("en-GB", {
+    weekday: "short",
+    day: "2-digit",
+    month: "short",
+    year: "numeric",
+    hour: "2-digit",
+    minute: "2-digit",
+  });
 }
 
 export default function ViewPackageBookingPage() {
@@ -86,14 +99,20 @@ export default function ViewPackageBookingPage() {
   if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
   if (error || !booking) return <p className="p-6 text-red-600">{error || "Booking not found."}</p>;
 
-  const hotelRowTotals = booking.hotels.map((h) => calculateHotelEntryTotals(h));
-  const combinedLineItems = [
-    ...hotelRowTotals.map((t) => ({ buyingCost: t.buyingTotal, sellingPrice: t.sellingTotal })),
-    ...booking.transportSegments.map((t) => ({ buyingCost: t.buyingCost, sellingPrice: t.sellingPrice })),
-    ...booking.flightSegments.map((f) => ({ buyingCost: f.buyingCost, sellingPrice: f.sellingPrice })),
-    ...booking.visaEntries.map((v) => ({ buyingCost: v.buyingCost, sellingPrice: v.sellingPrice })),
-  ];
-  const { grossBuying, grossSelling } = sumLineItems(combinedLineItems);
+  const rate = booking.exchangeRate || 1;
+
+  // Hotel lines convert from SAR inside this helper; everything else is
+  // already in the package's currency. One total, one currency.
+  const lines = calculatePackageLineItems(
+    {
+      hotels: booking.includeHotels ? booking.hotels : [],
+      transportSegments: booking.includeTransports ? booking.transportSegments : [],
+      flightSegments: booking.includeFlights ? booking.flightSegments : [],
+      visaEntries: booking.includeVisas ? booking.visaEntries : [],
+    },
+    rate
+  );
+  const { grossBuying, grossSelling } = sumLineItems(lines);
   const totals = calculateFooterTotals({
     grossBuying,
     grossSelling,
@@ -127,22 +146,22 @@ export default function ViewPackageBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-          <a
+          
             href={`/api/travelers/${booking.id}/pdf?type=invoice`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "var(--agency-color)" }}
-          >
+          <a>
             Generate Invoice
           </a>
-          <a
+          
             href={`/api/travelers/${booking.id}/pdf?type=voucher`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
             style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-          >
+          <a>
             Generate Voucher
           </a>
         </div>
@@ -157,6 +176,7 @@ export default function ViewPackageBookingPage() {
           <DetailRow label="Vendor" value={booking.vendorName} />
           <DetailRow label="Reference No." value={booking.referenceNo} />
           <DetailRow label="Currency" value={booking.currency} />
+          <DetailRow label="Exchange Rate" value={`1 SAR = ${rate} ${booking.currency}`} />
           <DetailRow label="Payment Type" value={booking.paymentType} />
           <DetailRow label="Payment Status" value={booking.paymentStatus || "Pending"} />
         </div>
@@ -170,103 +190,119 @@ export default function ViewPackageBookingPage() {
         </div>
       </div>
 
-      {booking.hotels.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Hotels
-          </h2>
-          <div className="space-y-3">
-            {booking.hotels.map((h, i) => (
+      {booking.includeHotels && booking.hotels.length > 0 && (
+        <SectionBlock title="Accommodation">
+          {booking.hotels.map((h, i) => {
+            const t = calculateHotelEntryTotals(h);
+            return (
               <div key={h.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                <p className="text-sm font-semibold text-[#121212] mb-2">{h.hotelName}, {h.city}</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
-                  <span>Room: {h.roomType}</span>
-                  <span>Check-in: {h.checkIn.slice(0, 10)}</span>
-                  <span>Check-out: {h.checkOut.slice(0, 10)}</span>
-                  <span>Nights: {hotelRowTotals[i].nights}</span>
-                  <span>Rooms: {h.rooms}</span>
-                  <span>Meal: {h.mealPlan || "—"}</span>
-                  <span>Buy Total: {hotelRowTotals[i].buyingTotal.toFixed(2)}</span>
-                  <span>Sell Total: {hotelRowTotals[i].sellingTotal.toFixed(2)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {booking.transportSegments.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Transport Segments
-          </h2>
-          <div className="space-y-3">
-            {booking.transportSegments.map((t) => (
-              <div key={t.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                <p className="text-sm font-semibold text-[#121212] mb-2">{t.vehicle} — {t.sector}</p>
-                <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
-                  <span>Date: {t.pickupDate.slice(0, 10)}</span>
-                  <span>Time: {t.pickupTime}</span>
-                  <span>Qty: {t.qty}</span>
-                  <span>Buy: {t.buyingCost.toFixed(2)}</span>
-                  <span>Sell: {t.sellingPrice.toFixed(2)}</span>
-                </div>
-              </div>
-            ))}
-          </div>
-        </div>
-      )}
-
-      {booking.flightSegments.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Flight Segments
-          </h2>
-          <div className="space-y-3">
-            {booking.flightSegments.map((f) => (
-              <div key={f.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
                 <p className="text-sm font-semibold text-[#121212] mb-2">
-                  {f.airline} {f.flightNo} — {f.departureAirport} → {f.arrivalAirport}
+                  Hotel {i + 1} — {h.hotelName}, {h.city}
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
-                  <span>Departs: {new Date(f.departureDateTime).toLocaleString()}</span>
-                  <span>Arrives: {new Date(f.arrivalDateTime).toLocaleString()}</span>
-                  <span>PNR: {f.pnr || "—"}</span>
-                  <span>Class: {f.travelClass || "—"}</span>
-                  <span>Buy: {f.buyingCost.toFixed(2)}</span>
-                  <span>Sell: {f.sellingPrice.toFixed(2)}</span>
+                  <span>Room: {h.roomType}</span>
+                  <span>Meal: {h.mealPlan || "—"}</span>
+                  <span>Check-in: {h.checkIn ? h.checkIn.slice(0, 10) : "—"}</span>
+                  <span>Check-out: {h.checkOut ? h.checkOut.slice(0, 10) : "—"}</span>
+                  <span>Nights: {t.nights}</span>
+                  <span>Rooms: {h.rooms}</span>
+                  <span>Guests: {h.adults}A {h.children}C {h.infants}I</span>
+                  <span>Conf. No: {h.confirmationNo || "—"}</span>
+                  {/* Entered in SAR — both shown so staff can check the rate */}
+                  <span>Sell (SAR): {t.sellingTotal.toFixed(2)}</span>
+                  <span className="font-semibold text-[#121212]">
+                    Sell ({booking.currency}): {(t.sellingTotal * rate).toFixed(2)}
+                  </span>
                 </div>
               </div>
-            ))}
-          </div>
-        </div>
+            );
+          })}
+        </SectionBlock>
       )}
 
-      {booking.visaEntries.length > 0 && (
-        <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Visa Applicants
-          </h2>
-          <div className="space-y-3">
-            {booking.visaEntries.map((v) => (
-              <div key={v.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
-                <p className="text-sm font-semibold text-[#121212] mb-2">{v.applicantName} — {v.visaCategory}</p>
+      {booking.includeTransports && booking.transportSegments.length > 0 && (
+        <SectionBlock title="Transport">
+          {booking.transportSegments.map((s, i) => (
+            <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+              <p className="text-sm font-semibold text-[#121212] mb-2">
+                Transfer {i + 1} — {s.sector}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                <span>Vehicle: {s.vehicle}</span>
+                <span>Date: {s.pickupDate ? s.pickupDate.slice(0, 10) : "—"}</span>
+                <span>Time: {s.pickupTime || "—"}</span>
+                <span>Qty: {s.qty}</span>
+                <span>Driver: {s.driverContact || "—"}</span>
+                <span>Buy Total: {s.buyingCost.toFixed(2)}</span>
+                <span>Sell Total: {s.sellingPrice.toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+        </SectionBlock>
+      )}
+
+      {booking.includeFlights && booking.flightSegments.length > 0 && (
+        <SectionBlock title="Flights">
+          {booking.flightSegments.map((s, i) => {
+            const t = calculateFlightSegmentTotals(s);
+            const names = (s.passengerNames || "").split("\n").filter(Boolean);
+            return (
+              <div key={s.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+                <p className="text-sm font-semibold text-[#121212] mb-2">
+                  Flight {i + 1} — {s.airline} {s.flightNo} ({s.departureAirport} → {s.arrivalAirport})
+                </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
-                  <span>Passport: {v.passportNumber}</span>
-                  <span>Processing: {v.processingType || "—"}</span>
-                  <span>Expiry: {v.expiryDate ? v.expiryDate.slice(0, 10) : "—"}</span>
-                  <span>Buy: {v.buyingCost.toFixed(2)}</span>
-                  <span>Sell: {v.sellingPrice.toFixed(2)}</span>
+                  <span>PNR: {s.pnr || "—"}</span>
+                  <span>Class: {s.travelClass || "—"}</span>
+                  <span>Departs: {fmtDateTime(s.departureDateTime)}</span>
+                  <span>Arrives: {fmtDateTime(s.arrivalDateTime)}</span>
+                  <span>Pax: {s.adults}A {s.children}C {s.infants}I</span>
+                  <span>Baggage: {s.baggage || "—"}</span>
+                  <span>Buy Total: {t.buyingTotal.toFixed(2)}</span>
+                  <span>Sell Total: {t.sellingTotal.toFixed(2)}</span>
                 </div>
+                {names.length > 0 && (
+                  <div className="mt-3 pt-3 border-t border-gray-100">
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
+                      Passengers
+                    </p>
+                    <ol className="text-xs text-gray-600 space-y-0.5">
+                      {names.map((n: string, ni: number) => (
+                        <li key={ni}>{ni + 1}. {n}</li>
+                      ))}
+                    </ol>
+                  </div>
+                )}
               </div>
-            ))}
-          </div>
-        </div>
+            );
+          })}
+        </SectionBlock>
       )}
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      {booking.includeVisas && booking.visaEntries.length > 0 && (
+        <SectionBlock title="Visas">
+          {booking.visaEntries.map((e, i) => (
+            <div key={e.id} className="rounded-xl border border-gray-100 bg-gray-50/60 p-4">
+              <p className="text-sm font-semibold text-[#121212] mb-2">
+                {e.applicantName} — {e.visaCategory}
+              </p>
+              <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                <span>Passport: {e.passportNumber}</span>
+                <span>Company: {e.companyName || "—"}</span>
+                <span>Processing: {e.processingType || "—"}</span>
+                <span>Submitted: {e.submissionDate ? e.submissionDate.slice(0, 10) : "—"}</span>
+                <span>Expires: {e.expiryDate ? e.expiryDate.slice(0, 10) : "—"}</span>
+                <span>Buy Total: {e.buyingCost.toFixed(2)}</span>
+                <span>Sell Total: {e.sellingPrice.toFixed(2)}</span>
+              </div>
+            </div>
+          ))}
+        </SectionBlock>
+      )}
+
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
-          Pricing Summary
+          Pricing Summary ({booking.currency})
         </h2>
         <DetailRow label="Gross Selling" value={totals.grossSelling.toFixed(2)} />
         <DetailRow label="Discount" value={booking.discount.toFixed(2)} />
@@ -275,6 +311,16 @@ export default function ViewPackageBookingPage() {
         <DetailRow label="Profit" value={totals.profit.toFixed(2)} />
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
+
+      {/* Read-only here by design — payments are only editable from
+          Edit/Manage, never from View. */}
+      <PaymentHistorySection
+        bookingType="package"
+        bookingId={booking.id}
+        netTotal={totals.netTotal}
+        currency={booking.currency}
+        readOnly
+      />
     </div>
   );
 }

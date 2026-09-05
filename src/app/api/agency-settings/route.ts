@@ -31,6 +31,14 @@ export async function GET() {
     cancellationPolicy: agency.cancellationPolicy,
     noShowPolicy: agency.noShowPolicy,
     importantContact: agency.importantContact,
+    // Round 4 — Agency Info section
+    address: agency.address,
+    branches: agency.branches,
+    licenseNo: agency.licenseNo,
+    // Phase 1b — voucher-only contact split
+    makkahContact: agency.makkahContact,
+    madinahContact: agency.madinahContact,
+    hotlineContact: agency.hotlineContact,
     bankAccounts: agency.bankAccounts,
     carousel: agency.media.filter((m) => m.section === "carousel"),
     gallery: agency.media.filter((m) => m.section === "gallery"),
@@ -39,7 +47,7 @@ export async function GET() {
   });
 }
 
-// PUT — the singular policy fields only. Bank accounts now have their own
+// PUT — the singular policy fields only. Bank accounts have their own
 // dedicated routes (/api/bank-accounts) since there can be several of them.
 export async function PUT(request: Request) {
   const session = await auth();
@@ -54,6 +62,14 @@ export async function PUT(request: Request) {
       cancellationPolicy: body.cancellationPolicy || null,
       noShowPolicy: body.noShowPolicy || null,
       importantContact: body.importantContact || null,
+      // Round 4 — Agency Info section
+      address: body.address || null,
+      branches: body.branches || null,
+      licenseNo: body.licenseNo || null,
+      // Phase 1b — voucher-only contact split
+      makkahContact: body.makkahContact || null,
+      madinahContact: body.madinahContact || null,
+      hotlineContact: body.hotlineContact || null,
     },
   });
 

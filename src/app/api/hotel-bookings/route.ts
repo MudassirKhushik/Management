@@ -18,7 +18,18 @@ export async function GET() {
       orderBy: { createdAt: "desc" },
     });
 
-    return NextResponse.json(bookings);
+    // Phase 1: attach totalPaid per booking in one grouped query instead of
+    // an N+1 fetch per row — the Manage page's Remaining Balance column
+    // reads this directly rather than calling /api/payments per booking.
+    const paidTotals = await prisma.payment.groupBy({
+      by: ["bookingId"],
+      where: { bookingType: "hotel", bookingId: { in: bookings.map((b) => b.id) } },
+      _sum: { amount: true },
+    });
+    const paidMap = new Map(paidTotals.map((p) => [p.bookingId, p._sum.amount || 0]));
+    const withTotals = bookings.map((b) => ({ ...b, totalPaid: paidMap.get(b.id) || 0 }));
+
+    return NextResponse.json(withTotals);
   } catch (error: any) {
     console.error("Database connection error on GET /api/hotel-bookings:", error);
     return NextResponse.json([]);
@@ -37,6 +48,12 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
+    // Item 5 (round 3): exchange rate is required now — a booking with no
+    // rate has no way to compute the agency's converted revenue/profit.
+    if (!body.exchangeRate || parseFloat(body.exchangeRate) <= 0) {
+      return NextResponse.json({ error: "Exchange rate is required" }, { status: 400 });
+    }
+
     const booking = await prisma.hotelBooking.create({
       data: {
         agencyId: session.user.agencyId,
@@ -44,9 +61,6 @@ export async function POST(request: Request) {
         guestName: body.guestName,
         nationality: body.nationality,
         mobileNo: body.mobileNo || null,
-        // FIXED — was reading body.clientRefNo, a field that never existed on
-        // the form (the form sends "referenceNo", same as every other booking
-        // type). Reference numbers were silently never saved via Add before this.
         referenceNo: body.referenceNo || null,
         currency: body.currency || "PKR",
         discount: parseFloat(body.discount) || 0,
@@ -55,6 +69,7 @@ export async function POST(request: Request) {
         note: body.note || null,
         vendorName: body.vendorName || null,
         paymentStatus: body.paymentStatus || "Pending",
+        exchangeRate: parseFloat(body.exchangeRate) || 0,
         hotels: {
           create: (body.hotels || []).map((row: any) => ({
             hotelName: row.hotelName,
@@ -68,8 +83,11 @@ export async function POST(request: Request) {
             infants: parseInt(row.infants) || 0,
             mealPlan: row.mealPlan || "RO",
             confirmationNo: row.confirmationNo || null,
-            buyingCostPerNight: parseFloat(row.buyingCostPerNight) || 0,
-            sellingPricePerNight: parseFloat(row.sellingPricePerNight) || 0,
+            // Phase 1a — replaces buyingCostPerNight/sellingPricePerNight
+            adultBuyingPricePerNight: parseFloat(row.adultBuyingPricePerNight) || 0,
+            adultSellingPricePerNight: parseFloat(row.adultSellingPricePerNight) || 0,
+            childBuyingPricePerNight: parseFloat(row.childBuyingPricePerNight) || 0,
+            childSellingPricePerNight: parseFloat(row.childSellingPricePerNight) || 0,
           })),
         },
       },

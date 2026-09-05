@@ -7,8 +7,14 @@ import { auth } from "../../../../../../auth";
 import { renderToBuffer } from "@react-pdf/renderer";
 import { FlightBookingDocument } from "@/src/lib/pdf/FlightBookingDocument";
 import React from "react";
+import QRCode from "qrcode";
 
 type RouteParams = { params: Promise<{ id: string }> };
+
+function resolveBaseUrl(reqUrl: string): string {
+  if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
+  return new URL(reqUrl).origin;
+}
 
 export async function GET(req: Request, { params }: RouteParams) {
   const session = await auth();
@@ -37,9 +43,32 @@ export async function GET(req: Request, { params }: RouteParams) {
     return NextResponse.json({ error: "Agency not found" }, { status: 404 });
   }
 
+  const payments = await prisma.payment.findMany({
+    where: { bookingType: "flight", bookingId: id },
+    include: { bankAccount: true },
+    orderBy: { paidOn: "asc" },
+  });
+
+  // Voucher-only. The QR points at the agency verification page, not at
+  // booking data — same URL on every booking type's voucher.
+  let verifyQrDataUri: string | null = null;
+  if (variant === "voucher") {
+    try {
+      const verifyUrl = `${resolveBaseUrl(req.url)}/verify/${agency.slug}`;
+      verifyQrDataUri = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 200 });
+    } catch (err) {
+      console.error("Failed to generate verification QR code:", err);
+    }
+  }
+
   try {
     const buffer = await renderToBuffer(
-      React.createElement(FlightBookingDocument, { booking, agency, variant }) as any
+      React.createElement(FlightBookingDocument, {
+        booking: { ...booking, payments },
+        agency,
+        variant,
+        verifyQrDataUri,
+      }) as any
     );
 
     return new NextResponse(new Uint8Array(buffer), {

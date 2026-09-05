@@ -30,6 +30,14 @@ type Settings = {
   cancellationPolicy: string | null;
   noShowPolicy: string | null;
   importantContact: string | null;
+  // Round 4 — Agency Info section
+  address: string | null;
+  branches: string | null;
+  licenseNo: string | null;
+  // Phase 1b — voucher-only contact split
+  makkahContact: string | null;
+  madinahContact: string | null;
+  hotlineContact: string | null;
   bankAccounts: BankAccount[];
   carousel: MediaItem[];
   gallery: MediaItem[];
@@ -100,11 +108,14 @@ function BankAccountCard({
     setDeleting(true);
     try {
       const res = await fetch(`/api/bank-accounts/${account.id}`, { method: "DELETE" });
-      if (!res.ok) throw new Error("Failed to delete");
+      if (!res.ok) {
+        const data = await res.json().catch(() => ({}));
+        throw new Error(data.error || "Failed to delete");
+      }
       onDeleted(account.id);
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("Could not remove this bank account.");
+      alert(err.message || "Could not remove this bank account.");
       setDeleting(false);
     }
   }
@@ -230,6 +241,14 @@ export default function AgencySettingsPage() {
           cancellationPolicy: settings.cancellationPolicy,
           noShowPolicy: settings.noShowPolicy,
           importantContact: settings.importantContact,
+          // Round 4 — Agency Info section
+          address: settings.address,
+          branches: settings.branches,
+          licenseNo: settings.licenseNo,
+          // Phase 1b — voucher-only contact split
+          makkahContact: settings.makkahContact,
+          madinahContact: settings.madinahContact,
+          hotlineContact: settings.hotlineContact,
         }),
       });
       if (!res.ok) throw new Error("Failed to save");
@@ -332,51 +351,131 @@ export default function AgencySettingsPage() {
           </button>
         </SectionCard>
 
-        <SectionCard title="Policies">
-          <form onSubmit={handleSavePolicies} className="space-y-4">
+        <form onSubmit={handleSavePolicies} className="space-y-5">
+          <SectionCard title="Agency Info">
+            <p className="text-xs text-gray-400 mb-3">
+              Shown on Invoice/Voucher documents — Address at the bottom, Branches under the
+              logo/name, License No. under the reference/date badges.
+            </p>
             <div className="grid grid-cols-1 gap-3">
               <div>
-                <label className={labelClass}>Important Contact</label>
+                <label className={labelClass}>Address</label>
+                <textarea
+                  className={inputClass}
+                  rows={2}
+                  placeholder="Shown at the bottom of Invoice/Voucher"
+                  value={settings.address || ""}
+                  onChange={(e) => updateField("address", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>Branches</label>
+                <textarea
+                  className={inputClass}
+                  rows={3}
+                  placeholder={"One branch per line, e.g.:\nKarachi Branch — Main Road\nLahore Branch — Gulberg"}
+                  value={settings.branches || ""}
+                  onChange={(e) => updateField("branches", e.target.value)}
+                />
+              </div>
+              <div>
+                <label className={labelClass}>License No.</label>
                 <input
                   className={inputClass}
-                  placeholder="Shown on invoices and vouchers"
-                  value={settings.importantContact || ""}
-                  onChange={(e) => updateField("importantContact", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>Cancellation Policy</label>
-                <textarea
-                  className={inputClass}
-                  rows={3}
-                  value={settings.cancellationPolicy || ""}
-                  onChange={(e) => updateField("cancellationPolicy", e.target.value)}
-                />
-              </div>
-              <div>
-                <label className={labelClass}>No-Show Policy</label>
-                <textarea
-                  className={inputClass}
-                  rows={3}
-                  value={settings.noShowPolicy || ""}
-                  onChange={(e) => updateField("noShowPolicy", e.target.value)}
+                  placeholder="e.g. Ministry of Hajj License No. 12345"
+                  value={settings.licenseNo || ""}
+                  onChange={(e) => updateField("licenseNo", e.target.value)}
                 />
               </div>
             </div>
+          </SectionCard>
 
-            {saveError && <p className="text-red-600 text-sm font-medium">{saveError}</p>}
-            {saved && <p className="text-emerald-600 text-sm font-medium">Saved.</p>}
+          <SectionCard title="Policies">
+            <div className="space-y-4">
+              <div className="grid grid-cols-1 gap-3">
+                <div>
+                  <label className={labelClass}>Important Contact</label>
+                  <input
+                    className={inputClass}
+                    placeholder="General contact — kept for anything not covered by the voucher contacts below"
+                    value={settings.importantContact || ""}
+                    onChange={(e) => updateField("importantContact", e.target.value)}
+                  />
+                </div>
 
-            <button
-              type="submit"
-              className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
-              style={{ backgroundColor: "var(--agency-color)" }}
-              disabled={saving}
-            >
-              {saving ? "Saving..." : "Save Policies"}
-            </button>
-          </form>
-        </SectionCard>
+                {/* Phase 1b: voucher-only contact split. These three show on
+                    the client-facing Voucher instead of Important Contact —
+                    the numbers a traveler calls once they've landed. */}
+                <div className="pt-1">
+                  <p className="text-xs text-gray-400 mb-3">
+                    Shown on the Voucher only (not the Invoice) — the contact numbers a traveler can
+                    call once they've landed.
+                  </p>
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                    <div>
+                      <label className={labelClass}>Makkah Contact</label>
+                      <input
+                        type="tel"
+                        className={inputClass}
+                        value={settings.makkahContact || ""}
+                        onChange={(e) => updateField("makkahContact", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Madinah Contact</label>
+                      <input
+                        type="tel"
+                        className={inputClass}
+                        value={settings.madinahContact || ""}
+                        onChange={(e) => updateField("madinahContact", e.target.value)}
+                      />
+                    </div>
+                    <div>
+                      <label className={labelClass}>Hotline / Emergency</label>
+                      <input
+                        type="tel"
+                        className={inputClass}
+                        value={settings.hotlineContact || ""}
+                        onChange={(e) => updateField("hotlineContact", e.target.value)}
+                      />
+                    </div>
+                  </div>
+                </div>
+
+                <div>
+                  <label className={labelClass}>Cancellation Policy</label>
+                  <textarea
+                    className={inputClass}
+                    rows={3}
+                    value={settings.cancellationPolicy || ""}
+                    onChange={(e) => updateField("cancellationPolicy", e.target.value)}
+                  />
+                </div>
+                <div>
+                  <label className={labelClass}>No-Show Policy</label>
+                  <textarea
+                    className={inputClass}
+                    rows={3}
+                    value={settings.noShowPolicy || ""}
+                    onChange={(e) => updateField("noShowPolicy", e.target.value)}
+                  />
+                </div>
+              </div>
+
+              {saveError && <p className="text-red-600 text-sm font-medium">{saveError}</p>}
+              {saved && <p className="text-emerald-600 text-sm font-medium">Saved.</p>}
+
+              <button
+                type="submit"
+                className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90 disabled:opacity-50"
+                style={{ backgroundColor: "var(--agency-color)" }}
+                disabled={saving}
+              >
+                {saving ? "Saving..." : "Save Policies"}
+              </button>
+            </div>
+          </SectionCard>
+        </form>
       </div>
     </div>
   );

@@ -2,13 +2,15 @@
 
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useState, Fragment } from "react";
 import Link from "next/link";
 import {
   calculateHotelEntryTotals,
   sumLineItems,
   calculateFooterTotals,
+  remainingBalanceTier,
 } from "@/src/lib/pricingCalculations";
+import QuickPaymentForm, { QuickPaymentPayload } from "@/src/components/booking/QuickPaymentForm";
 
 type HotelEntry = {
   hotelName: string;
@@ -16,8 +18,12 @@ type HotelEntry = {
   checkIn: string;
   checkOut: string;
   rooms: number;
-  buyingCostPerNight: number;
-  sellingPricePerNight: number;
+  adults: number;
+  children: number;
+  adultBuyingPricePerNight: number;
+  adultSellingPricePerNight: number;
+  childBuyingPricePerNight: number;
+  childSellingPricePerNight: number;
 };
 
 type HotelBookingWithEntries = {
@@ -32,14 +38,28 @@ type HotelBookingWithEntries = {
   vatPercent: number;
   createdAt: string;
   hotels: HotelEntry[];
+  totalPaid: number;
+  exchangeRate: number; // Item 2 — booking prices are in SAR, this converts to PKR for reporting
 };
 
-const PAYMENT_STATUSES = ["Pending", "Paid", "Partially Paid", "Cancelled"];
 const STATUS_COLOR: Record<string, string> = {
   Pending: "bg-amber-50 text-amber-700 border-amber-200",
   Paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
   "Partially Paid": "bg-blue-50 text-blue-700 border-blue-200",
-  Cancelled: "bg-red-50 text-red-700 border-red-200",
+};
+const TIER_CLASS: Record<string, string> = {
+  paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
+  partial: "bg-amber-50 text-amber-700 border-amber-200",
+  unpaid: "bg-red-50 text-red-700 border-red-200",
+  none: "bg-gray-50 text-gray-500 border-gray-200",
+};
+// Round 6: Remaining Balance font weight/size also escalates with urgency —
+// fully unpaid stands out more than a small remaining balance.
+const TIER_FONT: Record<string, string> = {
+  paid: "text-xs font-medium",
+  partial: "text-xs font-semibold",
+  unpaid: "text-sm font-bold",
+  none: "text-xs font-medium",
 };
 
 function EyeIcon() {
@@ -84,6 +104,14 @@ function TicketIcon() {
     </svg>
   );
 }
+function CashIcon() {
+  return (
+    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+      <rect x="2" y="6" width="20" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
+      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
 
 function IconButton({
   href,
@@ -124,23 +152,26 @@ export default function ManageHotelBookingsPage() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
   const [search, setSearch] = useState("");
+  const [paymentRowId, setPaymentRowId] = useState<string | null>(null);
+  const [paymentSaving, setPaymentSaving] = useState(false);
 
   useEffect(() => {
-    async function loadBookings() {
-      try {
-        const res = await fetch("/api/hotel-bookings");
-        if (!res.ok) throw new Error("Failed to load");
-        const data = await res.json();
-        setBookings(data);
-      } catch (err) {
-        console.error(err);
-        setError("Could not load hotel bookings. Please refresh the page.");
-      } finally {
-        setLoading(false);
-      }
-    }
     loadBookings();
   }, []);
+
+  async function loadBookings() {
+    try {
+      const res = await fetch("/api/hotel-bookings");
+      if (!res.ok) throw new Error("Failed to load");
+      const data = await res.json();
+      setBookings(data);
+    } catch (err) {
+      console.error(err);
+      setError("Could not load hotel bookings. Please refresh the page.");
+    } finally {
+      setLoading(false);
+    }
+  }
 
   async function handleDelete(id: string) {
     if (!confirm("Delete this hotel booking?")) return;
@@ -154,18 +185,37 @@ export default function ManageHotelBookingsPage() {
     }
   }
 
-  async function handlePaymentStatusChange(id: string, newStatus: string) {
-    setBookings((rows) => rows.map((b) => (b.id === id ? { ...b, paymentStatus: newStatus } : b)));
+  // Round 7: no manual status control at all — Pending/Partially Paid/Paid
+  // are always derived from payments received. Cancelling a booking now
+  // means deleting it (the Delete button already exists), so the earlier
+  // Cancel/Reactivate actions are gone.
+
+  async function handleQuickPayment(bookingId: string, payload: QuickPaymentPayload) {
+    setPaymentSaving(true);
     try {
-      const res = await fetch(`/api/hotel-bookings/${id}`, {
-        method: "PATCH",
+      const res = await fetch("/api/payments", {
+        method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ paymentStatus: newStatus }),
+        body: JSON.stringify({ bookingType: "hotel", bookingId, ...payload }),
       });
-      if (!res.ok) throw new Error("Failed to update status");
+      if (!res.ok) throw new Error("Server rejected the payment");
+
+      const updated = await fetch(`/api/hotel-bookings/${bookingId}`);
+      if (updated.ok) {
+        const fresh = await updated.json();
+        const paymentsRes = await fetch(`/api/payments?bookingType=hotel&bookingId=${bookingId}`);
+        const payments = paymentsRes.ok ? await paymentsRes.json() : [];
+        const totalPaid = payments.reduce((sum: number, p: any) => sum + (p.amount || 0), 0);
+        setBookings((rows) =>
+          rows.map((b) => (b.id === bookingId ? { ...b, ...fresh, totalPaid } : b))
+        );
+      }
+      setPaymentRowId(null);
     } catch (err) {
       console.error(err);
-      alert("Could not update payment status.");
+      alert("Could not record this payment.");
+    } finally {
+      setPaymentSaving(false);
     }
   }
 
@@ -184,6 +234,8 @@ export default function ManageHotelBookingsPage() {
     );
   });
 
+  // Item 1 (round 3): back to one column per hotel, as many as the widest
+  // booking needs — reverted from the single-column summary.
   const maxHotels = Math.max(1, ...bookings.map((b) => b.hotels.length));
 
   return (
@@ -220,8 +272,9 @@ export default function ManageHotelBookingsPage() {
                   Hotel {i + 1}
                 </th>
               ))}
-              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Net Total</th>
-              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Profit</th>
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Net Total (PKR)</th>
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Profit (PKR)</th>
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Remaining ({filtered[0]?.currency || "SAR"})</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendor</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Agent</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Payment</th>
@@ -242,61 +295,100 @@ export default function ManageHotelBookingsPage() {
                 discount: booking.discount,
                 vatPercent: booking.vatPercent,
               });
+              // Item 2: hotel prices are entered in SAR (booking.currency),
+              // but revenue/profit needs to be currency-aware for accurate
+              // reporting — converted to PKR using this booking's exchange
+              // rate. Remaining Balance stays in SAR since that's what the
+              // client actually still owes.
+              const rate = booking.exchangeRate || 1;
+              const convertedNetTotal = totals.netTotal * rate;
+              const convertedProfit = totals.profit * rate;
+              const remaining = Math.max(0, totals.netTotal - (booking.totalPaid || 0));
+              const tier = remainingBalanceTier(remaining, totals.netTotal);
+              const isPaymentRowOpen = paymentRowId === booking.id;
+              const actionColSpan = maxHotels + 8;
 
               return (
-                <tr key={booking.id} className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-                  <td className="px-4 py-3 font-medium text-[#121212]">{booking.guestName}</td>
-                  <td className="px-4 py-3 text-gray-600">{booking.mobileNo || "—"}</td>
-                  {Array.from({ length: maxHotels }).map((_, i) => (
-                    <td key={i} className="px-4 py-3 text-gray-600">
-                      {booking.hotels[i] ? `${booking.hotels[i].hotelName}, ${booking.hotels[i].city}` : "—"}
+                <Fragment key={booking.id}>
+                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-[#121212]">{booking.guestName}</td>
+                    <td className="px-4 py-3 text-gray-600">{booking.mobileNo || "—"}</td>
+                    {Array.from({ length: maxHotels }).map((_, i) => (
+                      <td key={i} className="px-4 py-3 text-gray-600">
+                        {booking.hotels[i] ? `${booking.hotels[i].hotelName}, ${booking.hotels[i].city}` : "—"}
+                      </td>
+                    ))}
+                    <td className="px-4 py-3 font-semibold text-[#121212]">{convertedNetTotal.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-emerald-600 font-medium">{convertedProfit.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
+                        className={`rounded-full border px-2.5 py-1 ${TIER_CLASS[tier]} ${TIER_FONT[tier]}`}
+                        title="Click to record a payment"
+                      >
+                        {tier === "paid" ? "Paid" : remaining.toFixed(2)}
+                      </button>
                     </td>
-                  ))}
-                  <td className="px-4 py-3 font-semibold text-[#121212]">{totals.netTotal.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-emerald-600 font-medium">{totals.profit.toFixed(2)}</td>
-                  <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
-                  <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
-                  <td className="px-4 py-3">
-                    <select
-                      value={booking.paymentStatus || "Pending"}
-                      onChange={(e) => handlePaymentStatusChange(booking.id, e.target.value)}
-                      className={`text-xs font-semibold rounded-full border px-2.5 py-1 focus:outline-none ${
-                        STATUS_COLOR[booking.paymentStatus || "Pending"]
-                      }`}
-                    >
-                      {PAYMENT_STATUSES.map((status) => (
-                        <option key={status} value={status}>{status}</option>
-                      ))}
-                    </select>
-                  </td>
-                  <td className="px-4 py-3">
-                    <div className="flex items-center gap-1">
-                      <IconButton href={`/portal/hotel-bookings/${booking.id}/view`} title="View">
-                        <EyeIcon />
-                      </IconButton>
-                      <IconButton href={`/portal/hotel-bookings/${booking.id}/edit`} title="Edit">
-                        <EditIcon />
-                      </IconButton>
-                      <IconButton
-                        href={`/api/hotel-bookings/${booking.id}/pdf?type=invoice`}
-                        title="Generate Invoice"
-                        external
+                    <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
+                    <td className="px-4 py-3">
+                      {/* Round 7: pure read-only badge, no actions here at
+                          all — delete the booking if it needs cancelling. */}
+                      <span
+                        className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${
+                          STATUS_COLOR[booking.paymentStatus || "Pending"]
+                        }`}
                       >
-                        <FileTextIcon />
-                      </IconButton>
-                      <IconButton
-                        href={`/api/hotel-bookings/${booking.id}/pdf?type=voucher`}
-                        title="Generate Voucher"
-                        external
-                      >
-                        <TicketIcon />
-                      </IconButton>
-                      <IconButton onClick={() => handleDelete(booking.id)} title="Delete">
-                        <TrashIcon />
-                      </IconButton>
-                    </div>
-                  </td>
-                </tr>
+                        {booking.paymentStatus || "Pending"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <IconButton
+                          onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
+                          title="Record Payment"
+                        >
+                          <CashIcon />
+                        </IconButton>
+                        <IconButton href={`/portal/hotel-bookings/${booking.id}/view`} title="View">
+                          <EyeIcon />
+                        </IconButton>
+                        <IconButton href={`/portal/hotel-bookings/${booking.id}/edit`} title="Edit">
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          href={`/api/hotel-bookings/${booking.id}/pdf?type=invoice`}
+                          title="Generate Invoice"
+                          external
+                        >
+                          <FileTextIcon />
+                        </IconButton>
+                        <IconButton
+                          href={`/api/hotel-bookings/${booking.id}/pdf?type=voucher`}
+                          title="Generate Voucher"
+                          external
+                        >
+                          <TicketIcon />
+                        </IconButton>
+                        <IconButton onClick={() => handleDelete(booking.id)} title="Delete">
+                          <TrashIcon />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                  {isPaymentRowOpen && (
+                    <tr className="border-b border-gray-100 bg-gray-50/40">
+                      <td colSpan={actionColSpan} className="px-4 py-4">
+                        <QuickPaymentForm
+                          compact
+                          saving={paymentSaving}
+                          onSubmit={(payload) => handleQuickPayment(booking.id, payload)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
               );
             })}
             {filtered.length === 0 && (

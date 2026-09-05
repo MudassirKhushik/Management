@@ -3,15 +3,24 @@
 export type TransportRow = {
   id: string; // local-only id (React key), not necessarily a saved database id
   vehicle: string;
-  sector: string; // e.g. "Jeddah to Makkah" — replaces the old fromLoc/toLoc pair
-  pickupDate: string; // "YYYY-MM-DD" string, matches an <input type="date">
-  pickupTime: string; // "HH:MM" string, matches an <input type="time">
+  sector: string;
+  pickupDate: string; // "YYYY-MM-DD", matches an <input type="date">
+  pickupTime: string;
   qty: number;
-  buyingCost: number; // TOTAL for this segment, not a per-unit rate
-  sellingPrice: number; // TOTAL for this segment, not a per-unit rate
+  driverContact: string; // optional — voucher-only, never on the invoice
+  buyingCost: number;
+  sellingPrice: number;
 };
 
-export const VEHICLE_TYPES = ["Sedan", "SUV", "Minivan", "Coach", "Luxury Bus", "Train Ticket"];
+export const VEHICLE_TYPES = [
+  "Sedan",
+  "SUV",
+  "Minivan",
+  "Hiace",
+  "Coach",
+  "Luxury Bus",
+  "Train Ticket",
+];
 
 export function emptyTransportRow(): TransportRow {
   return {
@@ -21,6 +30,7 @@ export function emptyTransportRow(): TransportRow {
     pickupDate: "",
     pickupTime: "",
     qty: 1,
+    driverContact: "",
     buyingCost: 0,
     sellingPrice: 0,
   };

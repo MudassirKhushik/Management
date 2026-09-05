@@ -12,33 +12,68 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
   providers: [
     Credentials({
       credentials: {
-        email: {},
-        password: {},
+        email: { label: "Email", type: "text" },
+        password: { label: "Password", type: "password" },
       },
       async authorize(credentials) {
-        const email = credentials?.email as string;
-        const password = credentials?.password as string;
-        if (!email || !password) return null;
+        try {
+          const email = credentials?.email as string;
+          const password = credentials?.password as string;
 
-        const user = await prisma.user.findUnique({
-          where: { email },
-          include: { agency: true },
-        });
-        if (!user) return null;
+          // DEBUG 1: Inspect incoming form structure
+          console.log("\n================ [AUTH DEBUG START] ================");
+          console.log("👉 Form submitted keys:", Object.keys(credentials || {}));
+          console.log("👉 Parsed email field:", email ? `"${email}"` : "MISSING");
+          console.log("👉 Parsed password field:", password ? "PRESENT" : "MISSING");
 
-        const valid = await bcrypt.compare(password, user.passwordHash);
-        if (!valid) return null;
+          if (!email || !password) {
+            console.error("❌ Auth Failed: Email or password value is completely blank.");
+            console.log("================== [AUTH DEBUG END] ==================\n");
+            return null;
+          }
 
-        return {
-          id: user.id,
-          email: user.email,
-          isSuperAdmin: user.isSuperAdmin,
-          agencyId: user.agencyId,
-          agencySlug: user.agency?.slug || null,
-          agencyName: user.agency?.name || null,
-          agencyColor: user.agency?.primaryColor || null,
-          agencyLogoUrl: user.agency?.logoUrl || null,
-        };
+          // DEBUG 2: Prisma database check
+          const user = await prisma.user.findUnique({
+            where: { email },
+            include: { agency: true },
+          });
+
+          console.log("👉 User matching email found in DB?:", !!user);
+          if (!user) {
+            console.error(`❌ Auth Failed: No user profile records match email: ${email}`);
+            console.log("================== [AUTH DEBUG END] ==================\n");
+            return null;
+          }
+
+          // DEBUG 3: Bcrypt hash evaluation
+          console.log("👉 Hash string extracted from DB:", user.passwordHash);
+          const valid = await bcrypt.compare(password, user.passwordHash);
+          console.log("👉 Is bcrypt decryption successful?:", valid);
+
+          if (!valid) {
+            console.error("❌ Auth Failed: Password string does not match the database hash.");
+            console.log("================== [AUTH DEBUG END] ==================\n");
+            return null;
+          }
+
+          console.log("✅ Auth Success! Returning user payload map back to Auth.js.");
+          console.log("================== [AUTH DEBUG END] ==================\n");
+
+          return {
+            id: user.id,
+            email: user.email,
+            isSuperAdmin: user.isSuperAdmin,
+            agencyId: user.agencyId,
+            agencySlug: user.agency?.slug || null,
+            agencyName: user.agency?.name || null,
+            agencyColor: user.agency?.primaryColor || null,
+            agencyLogoUrl: user.agency?.logoUrl || null,
+          };
+        } catch (error) {
+          console.error("💥 SYSTEM CRASH inside your authorize execution block:", error);
+          console.log("================== [AUTH DEBUG END] ==================\n");
+          return null;
+        }
       },
     }),
     ...(googleConfigured
@@ -90,12 +125,14 @@ export const { handlers, signIn, signOut, auth } = NextAuth({
 
     async session({ session, token }) {
       const s = session as any;
-      s.user.isSuperAdmin = token.isSuperAdmin as boolean;
-      s.user.agencyId = token.agencyId as string | null;
-      s.user.agencySlug = token.agencySlug as string | null;
-      s.user.agencyName = token.agencyName as string | null;
-      s.user.agencyColor = token.agencyColor as string | null;
-      s.user.agencyLogoUrl = token.agencyLogoUrl as string | null;
+      if (s.user) {
+        s.user.isSuperAdmin = token.isSuperAdmin as boolean;
+        s.user.agencyId = token.agencyId as string | null;
+        s.user.agencySlug = token.agencySlug as string | null;
+        s.user.agencyName = token.agencyName as string | null;
+        s.user.agencyColor = token.agencyColor as string | null;
+        s.user.agencyLogoUrl = token.agencyLogoUrl as string | null;
+      }
       return session;
     },
   },

@@ -6,12 +6,14 @@ import { useEffect, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
+import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 
 type EntryRow = {
   id: string;
   visaCategory: string;
   applicantName: string;
   passportNumber: string;
+  companyName: string | null;
   processingType: string | null;
   submissionDate: string | null;
   expiryDate: string | null;
@@ -108,22 +110,22 @@ export default function ViewVisaBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-          <a
+          
             href={`/api/visa-bookings/${booking.id}/pdf?type=invoice`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
             style={{ backgroundColor: "var(--agency-color)" }}
-          >
+          <a>
             Generate Invoice
           </a>
-          <a
+          
             href={`/api/visa-bookings/${booking.id}/pdf?type=voucher`}
             target="_blank"
             rel="noopener noreferrer"
             className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
             style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-          >
+          <a>
             Generate Voucher
           </a>
         </div>
@@ -163,6 +165,7 @@ export default function ViewVisaBookingPage() {
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
                 <span>Passport: {e.passportNumber}</span>
+                <span>Company: {e.companyName || "—"}</span>
                 <span>Processing: {e.processingType || "—"}</span>
                 <span>Submitted: {e.submissionDate ? e.submissionDate.slice(0, 10) : "—"}</span>
                 <span>Expires: {e.expiryDate ? e.expiryDate.slice(0, 10) : "—"}</span>
@@ -174,7 +177,7 @@ export default function ViewVisaBookingPage() {
         </div>
       </div>
 
-      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+      <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
           Pricing Summary
         </h2>
@@ -185,6 +188,16 @@ export default function ViewVisaBookingPage() {
         <DetailRow label="Profit" value={totals.profit.toFixed(2)} />
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
+
+      {/* Read-only here by design — payments are only editable from
+          Edit/Manage, never from View. */}
+      <PaymentHistorySection
+        bookingType="visa"
+        bookingId={booking.id}
+        netTotal={totals.netTotal}
+        currency={booking.currency}
+        readOnly
+      />
     </div>
   );
 }

@@ -25,7 +25,22 @@ model Agency {
   noShowPolicy       String?
   importantContact   String?
 
+  // Round 4: Agency Info section (Settings page) — shown on Invoice/Voucher
+  address   String? // shown at the bottom of Invoice/Voucher
+  branches  String? // free text, one branch per line — shown under the logo/name
+  licenseNo String? // shown under the REF/Date badges on Invoice/Voucher
+
+  // --- Voucher-only contact split (Phase 1b) ---
+  // These three show on the client-facing Voucher instead of
+  // importantContact. importantContact is left untouched/unused on
+  // documents for now rather than deleted, in case it's referenced
+  // elsewhere — safe to remove later once confirmed unused.
+  makkahContact  String?
+  madinahContact String?
+  hotlineContact String?
+
   bankAccounts BankAccount[]
+  payments     Payment[]
 
   users             User[]
   packageBookings   PackageBooking[]
@@ -48,6 +63,30 @@ model BankAccount {
   address     String?
   position    Int      @default(0)
   createdAt   DateTime @default(now())
+
+  payments Payment[]
+}
+
+// ============================================================
+// PAYMENT — installment/payment ledger (Phase 1d shared foundation).
+// bookingType + bookingId is a loose pair (not 5 separate nullable FKs)
+// so one model can attach to any of the five booking types, mirroring
+// how Media.section already works.
+// ============================================================
+model Payment {
+  id            String   @id @default(cuid())
+  agencyId      String
+  agency        Agency   @relation(fields: [agencyId], references: [id])
+  bookingType   String   // "hotel" | "transport" | "flight" | "visa" | "package"
+  bookingId     String
+  amount        Float
+  paidOn        DateTime
+  bankAccountId String?
+  bankAccount   BankAccount? @relation(fields: [bankAccountId], references: [id])
+  note          String?
+  createdAt     DateTime @default(now())
+
+  @@index([bookingType, bookingId])
 }
 
 model User {
@@ -105,7 +144,6 @@ model PackageBooking {
   vendorName String?
   paymentStatus String? @default("Pending")
 
-
   // --- Global Header (own copy) ---
   agentName   String
   guestName   String
@@ -114,16 +152,18 @@ model PackageBooking {
   referenceNo String?
   currency    String   @default("PKR")
 
+  // Hotel rows inside a package are priced in SAR like standalone hotel
+  // bookings; every other section is already PKR. This rate converts the
+  // hotel lines so one PKR total can be summed across all sections.
+  // Defaulted to 1 so adding it can never break existing rows (see §2).
+  exchangeRate Float @default(1)
+
   // --- Section toggles ---
   includeHotels     Boolean @default(false)
   includeTransports Boolean @default(false)
   includeFlights    Boolean @default(false)
   includeVisas      Boolean @default(false)
 
-  // --- Unified Pricing & Profit Module inputs ---
-  // (gross totals, tax amount, net total, and profit are all
-  // calculated from the line items below at read/render time —
-  // never stored)
   discount    Float    @default(0)
   vatPercent  Float    @default(0)
   paymentType String?
@@ -162,6 +202,12 @@ model HotelBooking {
   paymentType String?
   note        String?
 
+  // Item 5 (round 3): required numeric exchange rate — hotel currency
+  // defaults to SAR, but the agency's internal profit/revenue reporting
+  // needs a PKR-converted figure. This rate does that conversion. Required
+  // because there's no live data yet to worry about backfilling.
+  exchangeRate Float
+
   createdAt DateTime @default(now())
   hotels    HotelBookingEntry[]
 }
@@ -176,7 +222,7 @@ model HotelBookingEntry {
 
   hotelName      String
   city           String
-  roomType       String    // Single, Double, Triple, Quad, Quint Suite, Family Room
+  roomType       String    // Single, Double, Triple, Quad, Quint Suite, Family Room, Sharing
   checkIn        DateTime
   checkOut       DateTime
   rooms          Int       @default(1)
@@ -186,8 +232,14 @@ model HotelBookingEntry {
   mealPlan       String?   // RO, BB, HB, FB
   confirmationNo String?
 
-  buyingCostPerNight  Float
-  sellingPricePerNight Float
+  // --- Phase 1a: separate Adult/Child pricing, per person per night.
+  // Infants remain headcount-only, no pricing impact (per spec).
+  // Replaces the old flat buyingCostPerNight/sellingPricePerNight —
+  // see migration/001_hotel_adult_child_pricing.sql before deploying.
+  adultBuyingPricePerNight  Float @default(0)
+  adultSellingPricePerNight Float @default(0)
+  childBuyingPricePerNight  Float @default(0)
+  childSellingPricePerNight Float @default(0)
   // nights & line totals are CALCULATED on screen/PDF, never stored
 }
 
@@ -227,14 +279,16 @@ model TransportSegment {
   packageBookingId    String?
   packageBooking      PackageBooking?   @relation(fields: [packageBookingId], references: [id], onDelete: Cascade)
 
-  vehicle      String   // Sedan, SUV, Minivan, Coach, Luxury Bus, Train Ticket
-  sector       String   // e.g. "Jeddah to Makkah"
+  vehicle      String
+  sector       String
   pickupDate   DateTime
   pickupTime   String
   qty          Int      @default(1)
 
-  buyingCost   Float    // Total Buying Cost for this segment
-  sellingPrice Float    // Total Selling Price for this segment
+  driverContact String? // voucher-only — client calls the driver directly
+
+  buyingCost   Float
+  sellingPrice Float
 }
 
 // ============================================================
@@ -281,14 +335,24 @@ model FlightSegment {
   arrivalAirport    String
   departureDateTime DateTime
   arrivalDateTime   DateTime
-  travelClass       String?  // Economy, Premium Economy, Business, First Class
+  travelClass       String?
   adults            Int      @default(1)
   children          Int      @default(0)
   infants           Int      @default(0)
   baggage           String?
 
-  buyingCost   Float   // Total Buying Cost for this leg
-  sellingPrice Float   // Total Selling Price for this leg
+  // One name per line. Kept as free text rather than its own table — the
+  // list is only ever displayed, never queried or joined on.
+  passengerNames String?
+
+  // Per-passenger, per-leg. Infants DO get their own price here, unlike
+  // hotel where they're headcount-only.
+  adultBuyingPricePerLeg   Float @default(0)
+  adultSellingPricePerLeg  Float @default(0)
+  childBuyingPricePerLeg   Float @default(0)
+  childSellingPricePerLeg  Float @default(0)
+  infantBuyingPricePerLeg  Float @default(0)
+  infantSellingPricePerLeg Float @default(0)
 }
 
 // ============================================================
@@ -330,6 +394,8 @@ model VisaEntry {
   visaCategory    String   // e.g. Saudi Umrah, UK Tourist, Schengen Business
   applicantName   String
   passportNumber  String
+  companyName     String?  // Phase 4a — applicant's employer. Optional, so
+                           // this is safe on a table with live data (see §2).
   processingType  String?  // Normal, Urgent, Express
   submissionDate  DateTime?
   expiryDate      DateTime?
