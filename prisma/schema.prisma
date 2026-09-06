@@ -20,6 +20,8 @@ model Agency {
   publicSiteEnabled Boolean @default(true)
   aboutImageUrl String?
   media         Media[]
+  customDomain String? 
+
 
   cancellationPolicy String?
   noShowPolicy       String?

@@ -12,6 +12,7 @@ export default function AddAgencyPage() {
   const [city, setCity] = useState("");
   const [primaryColor, setPrimaryColor] = useState("#D2232A");
   const [publicSiteEnabled, setPublicSiteEnabled] = useState(true);
+  const [customDomain, setCustomDomain] = useState(""); // Naya State Add Kiya
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
@@ -22,10 +23,23 @@ export default function AddAgencyPage() {
     setLoading(true);
     setError("");
 
+    // Custom domain ko clean karne ke liye (space remove aur lowercase karna lazmi hai)
+    const cleanDomain = customDomain.trim().toLowerCase() || null;
+
     const res = await fetch("/api/admin/agencies", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ name, slug, city, primaryColor, publicSiteEnabled, email, password }),
+      // API Body me cleanDomain ko 'customDomain' key ke sath bhej rahe hain
+      body: JSON.stringify({ 
+        name, 
+        slug, 
+        city, 
+        primaryColor, 
+        publicSiteEnabled, 
+        customDomain: cleanDomain, 
+        email, 
+        password 
+      }),
     });
 
     setLoading(false);
@@ -65,6 +79,23 @@ export default function AddAgencyPage() {
             required
           />
         </div>
+        
+        {/* ================= NAYA CUSTOM DOMAIN INPUT FIELD ================= */}
+        <div>
+          <label className="block text-sm mb-1 font-medium text-gray-700">
+            Custom Domain (optional)
+          </label>
+          <input
+            className="w-full border rounded px-3 py-2 border-amber-500 bg-amber-50/10 placeholder-gray-400"
+            placeholder="e.g., binmasoodtravels.com"
+            value={customDomain}
+            onChange={(e) => setCustomDomain(e.target.value)}
+          />
+          <p className="text-xs text-gray-400 mt-1">
+            Bina http:// ya www ke likhein (e.g., agencyA.com). Khali chorne par default slug chalega.
+          </p>
+        </div>
+
         <div>
           <label className="block text-sm mb-1">City (optional)</label>
           <input

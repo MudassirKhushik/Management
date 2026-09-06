@@ -39,31 +39,40 @@ export async function PUT(req: Request, { params }: RouteParams) {
   const { id } = await params;
   const body = await req.json();
 
+  // --- NAYA CHECK: Edit mode me duplicate domain protection ---
+  if (body.customDomain !== undefined) {
+    const cleanDomain = body.customDomain ? body.customDomain.trim().toLowerCase() : null;
+    if (cleanDomain) {
+      const duplicateDomain = await prisma.agency.findFirst({
+        where: {
+          customDomain: cleanDomain,
+          NOT: { id } // Apni id chor kar baki check karo
+        }
+      });
+      if (duplicateDomain) {
+        return NextResponse.json({ error: "This custom domain is already used by another agency." }, { status: 400 });
+      }
+    }
+  }
+
   const updated = await prisma.agency.update({
     where: { id },
     data: {
-      // only set fields that were actually sent — toggle buttons only send one
-      // field at a time and shouldn't blank out everything else
       ...(body.name !== undefined ? { name: body.name } : {}),
       ...(body.city !== undefined ? { city: body.city } : {}),
       ...(body.primaryColor !== undefined ? { primaryColor: body.primaryColor } : {}),
       ...(body.logoUrl !== undefined ? { logoUrl: body.logoUrl } : {}),
       ...(typeof body.isActive === "boolean" ? { isActive: body.isActive } : {}),
-      ...(typeof body.publicSiteEnabled === "boolean"
-        ? { publicSiteEnabled: body.publicSiteEnabled }
-        : {}),
-      // slug intentionally NOT editable here — changing it breaks existing
-      // public links (yourdomain.com/oldslug) that may already be shared.
+      ...(typeof body.publicSiteEnabled === "boolean" ? { publicSiteEnabled: body.publicSiteEnabled } : {}),
+      // --- NAYA UPDATE: Custom domain ko data structure me include kiya ---
+      ...(body.customDomain !== undefined ? { customDomain: body.customDomain ? body.customDomain.trim().toLowerCase() : null } : {}),
     },
   });
 
   return NextResponse.json(updated);
 }
 
-// DELETE = deactivate (soft delete) if the agency has any real business data
-// worth preserving (bookings of any type, or inquiries). Only fully removes
-// the agency — including its settings-only data (website packages, media,
-// bank accounts, users) — when there's truly nothing to lose.
+// DELETE = deactivate (soft delete) if the agency has any real business data...
 export async function DELETE(req: Request, { params }: RouteParams) {
   const session = await requireSuperAdmin();
   if (!session) return NextResponse.json({ error: "Unauthorized" }, { status: 401 });
@@ -102,10 +111,6 @@ export async function DELETE(req: Request, { params }: RouteParams) {
     return NextResponse.json({ mode: "deactivated", agency });
   }
 
-  // No bookings or inquiries — safe to fully remove. Still need to clear
-  // settings-only data first (website packages, media, bank accounts,
-  // users), since Prisma enforces these foreign keys even for an agency
-  // that has zero bookings but still has, say, a logo or a bank account set.
   await prisma.package.deleteMany({ where: { agencyId: id } });
   await prisma.media.deleteMany({ where: { agencyId: id } });
   await prisma.bankAccount.deleteMany({ where: { agencyId: id } });

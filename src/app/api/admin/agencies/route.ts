@@ -40,6 +40,17 @@ export async function POST(req: Request) {
     return NextResponse.json({ error: "An agency with this slug already exists." }, { status: 400 });
   }
 
+  // --- NAYA CHECK: Domain Uniqueness Validation ---
+  const customDomain = body.customDomain ? body.customDomain.trim().toLowerCase() : null;
+  if (customDomain) {
+    const existingDomain = await prisma.agency.findFirst({
+      where: { customDomain }
+    });
+    if (existingDomain) {
+      return NextResponse.json({ error: "This custom domain is already assigned to another agency." }, { status: 400 });
+    }
+  }
+
   if (!body.email || !body.password) {
     return NextResponse.json({ error: "Login email and password are required." }, { status: 400 });
   }
@@ -52,7 +63,7 @@ export async function POST(req: Request) {
         slug,
         name: body.name,
         city: body.city || null,
-        // omit (not empty string) so Prisma's schema default "#D2232A" applies when unset
+        customDomain, // <-- Database table field me data append kiya
         primaryColor: body.primaryColor || undefined,
         publicSiteEnabled: typeof body.publicSiteEnabled === "boolean" ? body.publicSiteEnabled : true,
         users: {
