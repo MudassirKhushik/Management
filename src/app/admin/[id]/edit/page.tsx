@@ -113,12 +113,12 @@ export default function EditAgencyPage() {
           <label className="block text-sm mb-1 font-medium text-gray-700">Custom Domain</label>
           <input
             className="w-full border rounded px-3 py-2 border-amber-500 bg-amber-50/10 placeholder-gray-400"
-            placeholder="e.g., binmasoodtravels.com"
+            placeholder="e.g., travelcraftours.com"
             value={customDomain}
             onChange={(e) => setCustomDomain(e.target.value)}
           />
           <p className="text-xs text-gray-400 mt-1">
-            Bina http:// ya www ke daalein (e.g., binmasood.com). Domain hatane ke liye field ko khali chorh dein.
+            Without http:// or www (e.g., travelcraftours.com). 
           </p>
         </div>
 
