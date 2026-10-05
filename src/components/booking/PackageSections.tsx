@@ -6,7 +6,7 @@
 "use client";
 
 import { HotelRow, ROOM_TYPES, MEAL_PLANS } from "@/src/lib/hotelBookingTypes";
-import { TransportRow, VEHICLE_TYPES } from "@/src/lib/transportBookingTypes";
+import { TransportRow, VEHICLE_SUGGESTIONS } from "@/src/lib/transportBookingTypes";
 import { VisaRow, PROCESSING_TYPES } from "@/src/lib/visaBookingTypes";
 import { calculateHotelEntryTotals } from "@/src/lib/pricingCalculations";
 
@@ -184,7 +184,7 @@ export function TransportRowFields({
         <div>
           <label className={labelClass}>Vehicle</label>
           <select className={inputClass} value={row.vehicle} onChange={(e) => onChange("vehicle", e.target.value)}>
-            {VEHICLE_TYPES.map((v) => <option key={v} value={v}>{v}</option>)}
+            {VEHICLE_SUGGESTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
           </select>
         </div>
         <div>
