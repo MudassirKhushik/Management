@@ -127,7 +127,7 @@ export function HotelRowFields({
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
           Price per Person / Night (SAR)
         </p>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        {/* <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
             <label className={labelClass}>Adult Buying</label>
             <input type="number" step="0.01" className={inputClass} value={row.adultBuyingPricePerNight}
@@ -148,7 +148,7 @@ export function HotelRowFields({
             <input type="number" step="0.01" className={inputClass} value={row.childSellingPricePerNight}
               onChange={(e) => onChange("childSellingPricePerNight", parseFloat(e.target.value) || 0)} />
           </div>
-        </div>
+        </div> */}
         <div className="mt-3 flex flex-wrap gap-4 text-xs">
           <span className="text-gray-500">Nights: <span className="font-bold text-[#121212]">{totals.nights}</span></span>
           <span className="text-gray-500">
