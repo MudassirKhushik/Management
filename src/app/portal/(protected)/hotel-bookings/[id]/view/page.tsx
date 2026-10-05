@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { calculateHotelEntryTotals, sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
+import Spinner from "@/src/components/ui/Spinner";
 
 type HotelEntry = {
   id: string;
@@ -21,10 +22,9 @@ type HotelEntry = {
   infants: number;
   mealPlan: string | null;
   confirmationNo: string | null;
-  adultBuyingPricePerNight: number;
-  adultSellingPricePerNight: number;
-  childBuyingPricePerNight: number;
-  childSellingPricePerNight: number;
+  buyingRatePerNight: number;
+  sellingRatePerNight: number;
+  vendor: { id: string; name: string } | null;
 };
 
 type Booking = {
@@ -39,9 +39,8 @@ type Booking = {
   vatPercent: number;
   paymentType: string | null;
   note: string | null;
-  vendorName: string | null;
   createdAt: string;
-  exchangeRate: number; // Item 2 — for PKR-converted revenue/profit
+  exchangeRate: number;
   hotels: HotelEntry[];
 };
 
@@ -77,7 +76,7 @@ export default function ViewHotelBookingPage() {
     load();
   }, [id]);
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
   if (error || !booking) return <p className="p-6 text-red-600">{error || "Booking not found."}</p>;
 
   const rowTotals = booking.hotels.map((h) => calculateHotelEntryTotals(h));
@@ -112,7 +111,6 @@ export default function ViewHotelBookingPage() {
         </div>
       </div>
 
-      {/* PDF buttons — front and center on the View page */}
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
         <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
           Documents
@@ -145,7 +143,6 @@ export default function ViewHotelBookingPage() {
             Booking Information
           </h2>
           <DetailRow label="Agent" value={booking.agentName} />
-          <DetailRow label="Vendor" value={booking.vendorName} />
           <DetailRow label="Reference No." value={booking.referenceNo} />
           <DetailRow label="Currency" value={booking.currency} />
           <DetailRow label="Payment Type" value={booking.paymentType} />
@@ -171,6 +168,7 @@ export default function ViewHotelBookingPage() {
                 {h.hotelName}, {h.city}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                <span>Vendor: {h.vendor?.name || "—"}</span>
                 <span>Room: {h.roomType}</span>
                 <span>Check-in: {h.checkIn.slice(0, 10)}</span>
                 <span>Check-out: {h.checkOut.slice(0, 10)}</span>
@@ -181,8 +179,7 @@ export default function ViewHotelBookingPage() {
                 <span>Infants: {h.infants}</span>
                 <span>Meal: {h.mealPlan || "—"}</span>
                 <span>Conf. No: {h.confirmationNo || "—"}</span>
-                <span>Adult Rate: {h.adultSellingPricePerNight.toFixed(2)}/night</span>
-                <span>Child Rate: {h.childSellingPricePerNight.toFixed(2)}/night</span>
+                <span>Rate/Night: {h.sellingRatePerNight.toFixed(2)}</span>
                 <span>Buy Total: {rowTotals[i].buyingTotal.toFixed(2)}</span>
                 <span>Sell Total: {rowTotals[i].sellingTotal.toFixed(2)}</span>
               </div>
@@ -205,10 +202,6 @@ export default function ViewHotelBookingPage() {
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
 
-      {/* Phase 1d/e: Payments section — add a payment, see history, running
-          Remaining Balance. Reused as-is by every later booking type. */}
-      {/* Item 3 (round 3): View page shows payment history read-only —
-          adding/removing payments now only happens from Edit or Manage. */}
       <PaymentHistorySection
         bookingType="hotel"
         bookingId={booking.id}

@@ -1,8 +1,7 @@
-// src/app/api/flight-bookings/route.ts
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../auth";
+import { getNextSequenceNumber } from "@/src/lib/sequenceHelpers";
 
 export async function GET() {
   try {
@@ -13,12 +12,10 @@ export async function GET() {
 
     const bookings = await prisma.flightBooking.findMany({
       where: { agencyId: session.user.agencyId },
-      include: { segments: true },
+      include: { segments: { include: { vendor: true } } },
       orderBy: { createdAt: "desc" },
     });
 
-    // Manage page needs a Remaining Balance per row. One groupBy for the
-    // whole list instead of an N+1 fetch per booking.
     const grouped = await prisma.payment.groupBy({
       by: ["bookingId"],
       where: {
@@ -45,11 +42,12 @@ export async function POST(request: Request) {
     }
 
     const body = await request.json();
+    const voucherNumber = await getNextSequenceNumber(session.user.agencyId, "flight");
 
     const booking = await prisma.flightBooking.create({
       data: {
-        // Never trust a client-sent agencyId — always derived from session.
         agencyId: session.user.agencyId,
+        voucherNumber,
         agentName: body.agentName,
         guestName: body.guestName,
         nationality: body.nationality,
@@ -60,11 +58,11 @@ export async function POST(request: Request) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
-        vendorName: body.vendorName || null,
-        // Always starts Pending — status is derived from the ledger.
+        showBreakdown: !!body.showBreakdown,
         paymentStatus: "Pending",
         segments: {
           create: (body.segments || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             airline: row.airline,
             flightNo: row.flightNo,
             pnr: row.pnr || null,
@@ -77,7 +75,6 @@ export async function POST(request: Request) {
             children: parseInt(row.children) || 0,
             infants: parseInt(row.infants) || 0,
             baggage: row.baggage || null,
-            // Form sends an array; stored as one newline-separated column.
             passengerNames: Array.isArray(row.passengerNames)
               ? row.passengerNames.map((n: string) => n.trim()).filter(Boolean).join("\n") || null
               : row.passengerNames || null,
@@ -90,7 +87,7 @@ export async function POST(request: Request) {
           })),
         },
       },
-      include: { segments: true },
+      include: { segments: { include: { vendor: true } } },
     });
 
     return NextResponse.json(booking, { status: 201 });

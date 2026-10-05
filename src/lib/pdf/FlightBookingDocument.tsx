@@ -1,14 +1,3 @@
-// src/lib/pdf/FlightBookingDocument.tsx
-//
-// Mirrors HotelBookingDocument exactly — same header rules, divider, info
-// cards, notes/summary split, payment history, footer.
-//
-// Voucher = client-facing. Zero pricing, zero bank details. Shows the PNR
-//   and passenger list (what the traveller actually needs at check-in),
-//   plus Makkah/Madinah/Hotline and the agency verification QR.
-// Invoice = internal. Per-pax selling rates only — never buying cost or
-//   profit.
-
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import {
   calculateFlightSegmentTotals,
@@ -38,6 +27,7 @@ type SegmentRow = {
   childSellingPricePerLeg: number;
   infantBuyingPricePerLeg: number;
   infantSellingPricePerLeg: number;
+  vendor?: { name: string } | null;
 };
 
 type PaymentEntry = {
@@ -54,13 +44,13 @@ type BookingData = {
   nationality: string;
   mobileNo: string;
   referenceNo: string | null;
+  voucherNumber: string | null;
   currency: string;
   discount: number;
   vatPercent: number;
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  vendorName: string | null;
   createdAt: string | Date;
   segments: SegmentRow[];
   payments: PaymentEntry[];
@@ -94,8 +84,6 @@ function fmtDate(d: string | Date) {
   const weekday = date.toLocaleDateString("en-GB", { weekday: "short" });
   return `${datePart} (${weekday})`;
 }
-// Day-of-week matters as much as the date for flights — it goes back in,
-// with the time on a second line so the column doesn't get too wide.
 function fmtDateTime(d: string | Date) {
   const date = new Date(d);
   if (isNaN(date.getTime())) return "—";
@@ -113,11 +101,13 @@ export function FlightBookingDocument({
   agency,
   variant,
   verifyQrDataUri,
+  showBreakdown,
 }: {
   booking: BookingData;
   agency: AgencyData;
   variant: "invoice" | "voucher";
   verifyQrDataUri?: string | null;
+  showBreakdown?: boolean;
 }) {
   const isInvoice = variant === "invoice";
   const accent = agency.primaryColor || "#D2232A";
@@ -209,7 +199,6 @@ export function FlightBookingDocument({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
-          {/* Big logo only when one exists — never logo + name together. */}
           <View style={styles.logoRow}>
             {agency.logoUrl ? (
               <Image src={agency.logoUrl} style={styles.logoBig} />
@@ -223,7 +212,7 @@ export function FlightBookingDocument({
           <View style={styles.docTitleBlock}>
             <Text style={styles.docTitle}>{isInvoice ? "INVOICE" : "VOUCHER"}</Text>
             <View style={styles.badgeRow}>
-              <Text style={styles.badge}>REF {booking.referenceNo || booking.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.badge}>{booking.voucherNumber || "—"}</Text>
               <Text style={styles.badge}>{fmtDate(booking.createdAt)}</Text>
             </View>
             {agency.licenseNo && <Text style={styles.licenseText}>License No: {agency.licenseNo}</Text>}
@@ -249,9 +238,6 @@ export function FlightBookingDocument({
               {isInvoice && (
                 <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Type</Text><Text style={styles.infoValue}>{booking.paymentType || "—"}</Text></View>
               )}
-              {isInvoice && booking.vendorName && (
-                <View style={styles.infoLine}><Text style={styles.infoLabel}>Vendor</Text><Text style={styles.infoValue}>{booking.vendorName}</Text></View>
-              )}
             </View>
           </View>
           <View style={styles.infoCard}>
@@ -266,7 +252,6 @@ export function FlightBookingDocument({
           </View>
         </View>
 
-        {/* One block per leg, in entry order — same as Hotel's "Hotel 1". */}
         {booking.segments.map((s, i) => {
           const names = (s.passengerNames || "").split("\n").map((n) => n.trim()).filter(Boolean);
           return (
@@ -286,10 +271,12 @@ export function FlightBookingDocument({
                   <Text style={[styles.th, { flex: 1 }]}>Class</Text>
                   <Text style={[styles.th, { flex: 0.9 }]}>Pax</Text>
                   {isInvoice ? (
-                    <>
-                      <Text style={[styles.th, { flex: 1.6 }]}>Rate / Pax</Text>
-                      <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text>
-                    </>
+                    showBreakdown ? (
+                      <>
+                        <Text style={[styles.th, { flex: 1.6 }]}>Rate / Pax</Text>
+                        <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text>
+                      </>
+                    ) : null
                   ) : (
                     <Text style={[styles.th, { flex: 1 }]}>Baggage</Text>
                   )}
@@ -305,16 +292,16 @@ export function FlightBookingDocument({
                     {s.adults}A{s.children ? ` ${s.children}C` : ""}{s.infants ? ` ${s.infants}I` : ""}
                   </Text>
                   {isInvoice ? (
-                    <>
-                      {/* Selling only — buying cost and profit never appear
-                          on either document. */}
-                      <Text style={[styles.td, { flex: 1.6 }]}>
-                        A: {money(s.adultSellingPricePerLeg, booking.currency)}
-                        {s.children > 0 ? ` / C: ${money(s.childSellingPricePerLeg, booking.currency)}` : ""}
-                        {s.infants > 0 ? ` / I: ${money(s.infantSellingPricePerLeg, booking.currency)}` : ""}
-                      </Text>
-                      <Text style={[styles.td, { flex: 1 }]}>{money(rowTotals[i].sellingTotal, booking.currency)}</Text>
-                    </>
+                    showBreakdown ? (
+                      <>
+                        <Text style={[styles.td, { flex: 1.6 }]}>
+                          A: {money(s.adultSellingPricePerLeg, booking.currency)}
+                          {s.children > 0 ? ` / C: ${money(s.childSellingPricePerLeg, booking.currency)}` : ""}
+                          {s.infants > 0 ? ` / I: ${money(s.infantSellingPricePerLeg, booking.currency)}` : ""}
+                        </Text>
+                        <Text style={[styles.td, { flex: 1 }]}>{money(rowTotals[i].sellingTotal, booking.currency)}</Text>
+                      </>
+                    ) : null
                   ) : (
                     <Text style={[styles.td, { flex: 1 }]}>{s.baggage || "—"}</Text>
                   )}
@@ -414,7 +401,7 @@ export function FlightBookingDocument({
               {verifyQrDataUri && (
                 <View style={styles.qrBlock}>
                   <Image src={verifyQrDataUri} style={styles.qrImage} />
-                  <Text style={styles.qrCaption}>Scan to Verify{"\n"}Hajj & Umrah Services</Text>
+                  <Text style={styles.qrCaption}>Scan to Verify</Text>
                 </View>
               )}
             </View>

@@ -1,5 +1,3 @@
-// src/app/portal/(protected)/flight-bookings/add/page.tsx
-
 "use client";
 
 import { useState } from "react";
@@ -16,15 +14,11 @@ import {
 import { FlightRow, emptyFlightRow } from "@/src/lib/flightBookingTypes";
 import { calculateFlightSegmentTotals, sumLineItems } from "@/src/lib/pricingCalculations";
 
-const inputClass =
-  "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
-const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
-
 export default function AddFlightBookingPage() {
   const router = useRouter();
   const [header, setHeader] = useState<GlobalHeaderData>({ ...emptyGlobalHeader, currency: "PKR" });
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
-  const [vendorName, setVendorName] = useState("");
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [segments, setSegments] = useState<FlightRow[]>([emptyFlightRow()]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
@@ -57,7 +51,7 @@ export default function AddFlightBookingPage() {
       const res = await fetch("/api/flight-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, segments }),
+        body: JSON.stringify({ ...header, ...footer, showBreakdown, segments }),
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -65,8 +59,6 @@ export default function AddFlightBookingPage() {
       }
       const created = await res.json();
 
-      // Separate step: the booking must exist before a Payment can point at
-      // it. A failure here shouldn't lose the booking — it's already saved.
       const paid = parseFloat(initialPaidAmount);
       if (paid > 0) {
         const payRes = await fetch("/api/payments", {
@@ -106,22 +98,6 @@ export default function AddFlightBookingPage() {
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Vendor
-          </h2>
-          <div>
-            <label className={labelClass}>Vendor Name</label>
-            <input
-              type="text"
-              className={inputClass}
-              placeholder="Who you bought these tickets from (consolidator, not the sales agent)"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-            />
-          </div>
-        </section>
-
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
             Flights
           </h2>
 
@@ -148,12 +124,32 @@ export default function AddFlightBookingPage() {
           </button>
         </section>
 
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--agency-color)" }}>
+                Show Breakdown on Invoice
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-1">
+                When off, the client's Invoice shows only the overall total. Turn on to also show each flight's per-pax rate and Sell Total.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showBreakdown ? "" : "bg-gray-200"}`}
+              style={showBreakdown ? { backgroundColor: "var(--agency-color)" } : undefined}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBreakdown ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </section>
+
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          bookingType="flight"
           initialPaidAmount={initialPaidAmount}
           onInitialPaidAmountChange={setInitialPaidAmount}
           initialBankAccountId={initialBankAccountId}

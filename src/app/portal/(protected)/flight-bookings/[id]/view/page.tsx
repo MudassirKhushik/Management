@@ -1,5 +1,3 @@
-// src/app/portal/(protected)/flight-bookings/[id]/view/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -7,6 +5,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { calculateFlightSegmentTotals, sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
+import Spinner from "@/src/components/ui/Spinner";
 
 type SegmentRow = {
   id: string;
@@ -29,6 +28,7 @@ type SegmentRow = {
   childSellingPricePerLeg: number;
   infantBuyingPricePerLeg: number;
   infantSellingPricePerLeg: number;
+  vendor: { id: string; name: string } | null;
 };
 
 type Booking = {
@@ -38,13 +38,13 @@ type Booking = {
   nationality: string;
   mobileNo: string;
   referenceNo: string | null;
+  voucherNumber: string | null;
   currency: string;
   discount: number;
   vatPercent: number;
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  vendorName: string | null;
   createdAt: string;
   segments: SegmentRow[];
 };
@@ -93,7 +93,7 @@ export default function ViewFlightBookingPage() {
     load();
   }, [id]);
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
   if (error || !booking) return <p className="p-6 text-red-600">{error || "Booking not found."}</p>;
 
   const rowTotals = booking.segments.map((s) => calculateFlightSegmentTotals(s));
@@ -112,68 +112,41 @@ export default function ViewFlightBookingPage() {
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
         <h1 className="text-2xl font-bold text-[#121212]">Flight Booking Details</h1>
         <div className="flex gap-2">
-          <button
-            onClick={() => router.push("/portal/flight-bookings/manage")}
-            className="rounded-lg px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-colors"
-          >
+          <button onClick={() => router.push("/portal/flight-bookings/manage")} className="rounded-lg px-4 py-2 text-sm font-semibold border border-gray-200 hover:bg-gray-50 transition-colors">
             Back
           </button>
-          <Link
-            href={`/portal/flight-bookings/${booking.id}/edit`}
-            className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-            style={{ backgroundColor: "var(--agency-color)" }}
-          >
+          <Link href={`/portal/flight-bookings/${booking.id}/edit`} className="rounded-lg px-4 py-2 text-sm font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: "var(--agency-color)" }}>
             Edit
           </Link>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-5">
-        <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-          Documents
-        </h2>
+        <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>Documents</h2>
         <div className="flex flex-wrap gap-3">
-  {/* Generate Invoice Link */}
-  <a
-    href={`/api/flight-bookings/${booking.id}/pdf?type=invoice`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-    style={{ backgroundColor: "var(--agency-color)" }}
-  >
-    Generate Invoice
-  </a>
-
-  {/* Generate Voucher Link */}
-  <a
-    href={`/api/flight-bookings/${booking.id}/pdf?type=voucher`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
-    style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-  >
-    Generate Voucher
-  </a>
-</div>
-
+          <a href={`/api/flight-bookings/${booking.id}/pdf?type=invoice`} target="_blank" rel="noopener noreferrer"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90" style={{ backgroundColor: "var(--agency-color)" }}>
+            Generate Invoice
+          </a>
+          <a href={`/api/flight-bookings/${booking.id}/pdf?type=voucher`} target="_blank" rel="noopener noreferrer"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]" style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}>
+            Generate Voucher
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
-            Booking Information
-          </h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>Booking Information</h2>
           <DetailRow label="Agent" value={booking.agentName} />
-          <DetailRow label="Vendor" value={booking.vendorName} />
+          <DetailRow label="Voucher No." value={booking.voucherNumber} />
           <DetailRow label="Reference No." value={booking.referenceNo} />
           <DetailRow label="Currency" value={booking.currency} />
           <DetailRow label="Payment Type" value={booking.paymentType} />
           <DetailRow label="Payment Status" value={booking.paymentStatus || "Pending"} />
         </div>
         <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
-            Guest Information
-          </h2>
+          <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>Guest Information</h2>
           <DetailRow label="Guest Name" value={booking.guestName} />
           <DetailRow label="Nationality" value={booking.nationality} />
           <DetailRow label="Mobile No." value={booking.mobileNo} />
@@ -181,9 +154,7 @@ export default function ViewFlightBookingPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-          Flights
-        </h2>
+        <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>Flights</h2>
         <div className="space-y-3">
           {booking.segments.map((s, i) => {
             const names = (s.passengerNames || "").split("\n").filter(Boolean);
@@ -193,6 +164,7 @@ export default function ViewFlightBookingPage() {
                   Flight {i + 1} — {s.airline} {s.flightNo} ({s.departureAirport} → {s.arrivalAirport})
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                  <span>Vendor: {s.vendor?.name || "—"}</span>
                   <span>PNR: {s.pnr || "—"}</span>
                   <span>Class: {s.travelClass || "—"}</span>
                   <span>Departs: {fmtDateTime(s.departureDateTime)}</span>
@@ -204,13 +176,9 @@ export default function ViewFlightBookingPage() {
                 </div>
                 {names.length > 0 && (
                   <div className="mt-3 pt-3 border-t border-gray-100">
-                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">
-                      Passengers
-                    </p>
+                    <p className="text-[10px] font-semibold uppercase tracking-wide text-gray-400 mb-1">Passengers</p>
                     <ol className="text-xs text-gray-600 space-y-0.5">
-                      {names.map((n, ni) => (
-                        <li key={ni}>{ni + 1}. {n}</li>
-                      ))}
+                      {names.map((n, ni) => <li key={ni}>{ni + 1}. {n}</li>)}
                     </ol>
                   </div>
                 )}
@@ -221,9 +189,7 @@ export default function ViewFlightBookingPage() {
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5 mb-4">
-        <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>
-          Pricing Summary
-        </h2>
+        <h2 className="text-xs font-bold uppercase tracking-widest mb-3" style={{ color: "var(--agency-color)" }}>Pricing Summary</h2>
         <DetailRow label="Gross Selling" value={totals.grossSelling.toFixed(2)} />
         <DetailRow label="Discount" value={booking.discount.toFixed(2)} />
         <DetailRow label="VAT %" value={`${booking.vatPercent}%`} />
@@ -232,15 +198,7 @@ export default function ViewFlightBookingPage() {
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
 
-      {/* Read-only here by design — payments are only editable from
-          Edit/Manage, never from View. */}
-      <PaymentHistorySection
-        bookingType="flight"
-        bookingId={booking.id}
-        netTotal={totals.netTotal}
-        currency={booking.currency}
-        readOnly
-      />
+      <PaymentHistorySection bookingType="flight" bookingId={booking.id} netTotal={totals.netTotal} currency={booking.currency} readOnly />
     </div>
   );
 }

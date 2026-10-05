@@ -1,5 +1,3 @@
-// src/app/api/flight-bookings/[id]/route.ts
-
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../../auth";
@@ -18,7 +16,7 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const booking = await prisma.flightBooking.findUnique({
       where: { id },
-      include: { segments: true },
+      include: { segments: { include: { vendor: true } } },
     });
 
     if (!booking || booking.agencyId !== session.user.agencyId) {
@@ -67,11 +65,10 @@ export async function PUT(request: Request, { params }: RouteParams) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
-        vendorName: body.vendorName || null,
-        // paymentStatus deliberately NOT taken from the body — recomputed
-        // from the ledger below.
+        showBreakdown: !!body.showBreakdown,
         segments: {
           create: (body.segments || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             airline: row.airline,
             flightNo: row.flightNo,
             pnr: row.pnr || null,
@@ -96,12 +93,9 @@ export async function PUT(request: Request, { params }: RouteParams) {
           })),
         },
       },
-      include: { segments: true },
+      include: { segments: { include: { vendor: true } } },
     });
 
-    // Editing segments/discount/VAT changes Net Total, which can change
-    // what the same payments add up to. Re-derive, or the badge goes stale
-    // until the next payment is recorded.
     try {
       const netTotal = await getBookingNetTotal("flight", id);
       const payments = await prisma.payment.findMany({ where: { bookingType: "flight", bookingId: id } });
@@ -117,8 +111,6 @@ export async function PUT(request: Request, { params }: RouteParams) {
   }
 }
 
-// No PATCH — payment status is never manually set anywhere.
-
 export async function DELETE(request: Request, { params }: RouteParams) {
   try {
     const { id } = await params;
@@ -132,8 +124,6 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Payments point at bookings via a loose (bookingType, bookingId) pair,
-    // so there's no FK cascade — clean them up explicitly.
     await prisma.payment.deleteMany({ where: { bookingType: "flight", bookingId: id } });
     await prisma.flightBooking.delete({ where: { id } });
 

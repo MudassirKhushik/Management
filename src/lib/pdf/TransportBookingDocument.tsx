@@ -1,21 +1,5 @@
-// src/lib/pdf/TransportBookingDocument.tsx
-//
-// Mirrors HotelBookingDocument exactly — same header rules, divider, info
-// cards, notes/summary split, payment history, footer.
-//
-// Voucher = client-facing. Zero pricing, zero bank details. Shows the
-//   driver's contact (the whole point of a transport voucher) plus
-//   Makkah/Madinah/Hotline and the agency verification QR.
-// Invoice = internal. Selling price only per segment — never buying cost
-//   or profit. Driver contact is NOT shown here.
-
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
-import {
-  sumLineItems,
-  calculateFooterTotals,
-  sumPayments,
-  calculateRemainingBalance,
-} from "@/src/lib/pricingCalculations";
+import { sumLineItems, calculateFooterTotals, sumPayments, calculateRemainingBalance } from "@/src/lib/pricingCalculations";
 
 type SegmentRow = {
   vehicle: string;
@@ -26,6 +10,7 @@ type SegmentRow = {
   driverContact: string | null;
   buyingCost: number;
   sellingPrice: number;
+  vendor?: { name: string } | null;
 };
 
 type PaymentEntry = {
@@ -42,13 +27,13 @@ type BookingData = {
   nationality: string;
   mobileNo: string;
   referenceNo: string | null;
+  voucherNumber: string | null;
   currency: string;
   discount: number;
   vatPercent: number;
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  vendorName: string | null;
   createdAt: string | Date;
   segments: SegmentRow[];
   payments: PaymentEntry[];
@@ -58,13 +43,7 @@ type AgencyData = {
   name: string;
   logoUrl: string | null;
   primaryColor: string | null;
-  bankAccounts: {
-    accountName: string | null;
-    bankName: string | null;
-    accountNo: string | null;
-    iban: string | null;
-    address: string | null;
-  }[];
+  bankAccounts: { accountName: string | null; bankName: string | null; accountNo: string | null; iban: string | null; address: string | null }[];
   cancellationPolicy: string | null;
   noShowPolicy: string | null;
   makkahContact: string | null;
@@ -91,18 +70,19 @@ export function TransportBookingDocument({
   agency,
   variant,
   verifyQrDataUri,
+  showBreakdown,
 }: {
   booking: BookingData;
   agency: AgencyData;
   variant: "invoice" | "voucher";
   verifyQrDataUri?: string | null;
+  showBreakdown?: boolean;
 }) {
   const isInvoice = variant === "invoice";
   const accent = agency.primaryColor || "#D2232A";
 
   const styles = StyleSheet.create({
     page: { padding: 30, fontSize: 9, fontFamily: "Helvetica", color: "#121212" },
-
     headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
     logoRow: { flexDirection: "column" },
     logoBig: { width: 155, height: 88, objectFit: "contain" },
@@ -113,11 +93,9 @@ export function TransportBookingDocument({
     badgeRow: { flexDirection: "row", gap: 6, marginTop: 8 },
     badge: { backgroundColor: accent, color: "white", paddingVertical: 5, paddingHorizontal: 9, borderRadius: 3, fontSize: 8 },
     licenseText: { fontSize: 6.5, color: "#9A9A9A", marginTop: 4 },
-
     dotDivider: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginVertical: 14, gap: 6 },
     dotLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
     dotMark: { fontSize: 9, color: accent },
-
     sectionRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
     infoCard: { flex: 1, border: "1pt solid #E5E1D8", borderRadius: 6, overflow: "hidden" },
     infoCardTitleBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10 },
@@ -126,7 +104,6 @@ export function TransportBookingDocument({
     infoLine: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
     infoLabel: { color: "#6B6B6B" },
     infoValue: { fontFamily: "Helvetica-Bold" },
-
     entryTitleBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, marginBottom: 0, marginTop: 6 },
     entryTitle: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.8 },
     table: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 4, borderBottomRightRadius: 4, marginBottom: 16 },
@@ -134,22 +111,18 @@ export function TransportBookingDocument({
     tableRow: { flexDirection: "row", borderTop: "1pt solid #EFEDE7" },
     th: { padding: 6, color: "#5A5A5A", fontFamily: "Helvetica-Bold", fontSize: 7, textTransform: "uppercase" },
     td: { padding: 6, fontSize: 8 },
-
     priceRow: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 },
     notesBox: { flex: 1, border: "1pt solid #E5E1D8", borderRadius: 6, padding: 12 },
     notesTitle: { fontSize: 8, fontFamily: "Helvetica-Bold", color: accent, textTransform: "uppercase", marginBottom: 5, letterSpacing: 0.5 },
     notesText: { fontSize: 8, color: "#6B6B6B", marginBottom: 3, lineHeight: 1.4 },
-
     summaryBox: { width: 230, border: "1pt solid #E5E1D8", borderRadius: 6, padding: 12 },
     summaryLine: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
     summaryTotalLine: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "1pt solid #E5E1D8" },
     summaryTotalLabel: { fontFamily: "Helvetica-Bold", fontSize: 11 },
     summaryTotalValue: { fontFamily: "Helvetica-Bold", fontSize: 11, color: accent },
-
     paymentHistoryBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, marginTop: 6 },
     paymentHistoryTitle: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.8 },
     paymentTable: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 4, borderBottomRightRadius: 4, marginBottom: 16 },
-
     footer: { marginTop: 8, paddingTop: 12, borderTop: "1pt solid #E5E1D8" },
     footerRow: { flexDirection: "row", gap: 24, alignItems: "flex-start" },
     footerCol: { flex: 1 },
@@ -158,7 +131,6 @@ export function TransportBookingDocument({
     policyText: { fontSize: 7, color: "#9A9A9A", marginTop: 2 },
     signOff: { marginTop: 14, alignItems: "flex-end" },
     signOffText: { fontSize: 8, color: "#6B6B6B" },
-
     qrBlock: { alignItems: "center" },
     qrImage: { width: 70, height: 70 },
     qrCaption: { fontSize: 6.5, color: "#9A9A9A", marginTop: 3, textAlign: "center" },
@@ -167,13 +139,7 @@ export function TransportBookingDocument({
   const { grossBuying, grossSelling } = sumLineItems(
     booking.segments.map((s) => ({ buyingCost: s.buyingCost, sellingPrice: s.sellingPrice }))
   );
-  const totals = calculateFooterTotals({
-    grossBuying,
-    grossSelling,
-    discount: booking.discount,
-    vatPercent: booking.vatPercent,
-  });
-
+  const totals = calculateFooterTotals({ grossBuying, grossSelling, discount: booking.discount, vatPercent: booking.vatPercent });
   const totalPaid = sumPayments(booking.payments || []);
   const remainingBalance = calculateRemainingBalance(totals.netTotal, booking.payments || []);
 
@@ -181,55 +147,35 @@ export function TransportBookingDocument({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
-          {/* Big logo only when one exists — never logo + name together. */}
           <View style={styles.logoRow}>
-            {agency.logoUrl ? (
-              <Image src={agency.logoUrl} style={styles.logoBig} />
-            ) : (
-              <Text style={styles.agencyNameFallback}>{agency.name}</Text>
-            )}
-            {agency.branches && (
-              <Text style={styles.branchesText}>{agency.branches.split("\n").filter(Boolean).join("  •  ")}</Text>
-            )}
+            {agency.logoUrl ? <Image src={agency.logoUrl} style={styles.logoBig} /> : <Text style={styles.agencyNameFallback}>{agency.name}</Text>}
+            {agency.branches && <Text style={styles.branchesText}>{agency.branches.split("\n").filter(Boolean).join("  •  ")}</Text>}
           </View>
           <View style={styles.docTitleBlock}>
             <Text style={styles.docTitle}>{isInvoice ? "INVOICE" : "VOUCHER"}</Text>
             <View style={styles.badgeRow}>
-              <Text style={styles.badge}>REF {booking.referenceNo || booking.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.badge}>{booking.voucherNumber || "—"}</Text>
               <Text style={styles.badge}>{fmtDate(booking.createdAt)}</Text>
             </View>
             {agency.licenseNo && <Text style={styles.licenseText}>License No: {agency.licenseNo}</Text>}
           </View>
         </View>
 
-        <View style={styles.dotDivider}>
-          <View style={styles.dotLine} />
-          <Text style={styles.dotMark}>✕</Text>
-          <View style={styles.dotLine} />
-        </View>
+        <View style={styles.dotDivider}><View style={styles.dotLine} /><Text style={styles.dotMark}>✕</Text><View style={styles.dotLine} /></View>
 
         <View style={styles.sectionRow}>
           <View style={styles.infoCard}>
-            <View style={styles.infoCardTitleBar}>
-              <Text style={styles.infoCardTitle}>Booking Information</Text>
-            </View>
+            <View style={styles.infoCardTitleBar}><Text style={styles.infoCardTitle}>Booking Information</Text></View>
             <View style={styles.infoCardBody}>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Agent</Text><Text style={styles.infoValue}>{booking.agentName}</Text></View>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Reference No.</Text><Text style={styles.infoValue}>{booking.referenceNo || "—"}</Text></View>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Currency</Text><Text style={styles.infoValue}>{booking.currency}</Text></View>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Status</Text><Text style={styles.infoValue}>{booking.paymentStatus || "Pending"}</Text></View>
-              {isInvoice && (
-                <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Type</Text><Text style={styles.infoValue}>{booking.paymentType || "—"}</Text></View>
-              )}
-              {isInvoice && booking.vendorName && (
-                <View style={styles.infoLine}><Text style={styles.infoLabel}>Vendor</Text><Text style={styles.infoValue}>{booking.vendorName}</Text></View>
-              )}
+              {isInvoice && <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Type</Text><Text style={styles.infoValue}>{booking.paymentType || "—"}</Text></View>}
             </View>
           </View>
           <View style={styles.infoCard}>
-            <View style={styles.infoCardTitleBar}>
-              <Text style={styles.infoCardTitle}>Guest Information</Text>
-            </View>
+            <View style={styles.infoCardTitleBar}><Text style={styles.infoCardTitle}>Guest Information</Text></View>
             <View style={styles.infoCardBody}>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Guest Name</Text><Text style={styles.infoValue}>{booking.guestName}</Text></View>
               <View style={styles.infoLine}><Text style={styles.infoLabel}>Nationality</Text><Text style={styles.infoValue}>{booking.nationality}</Text></View>
@@ -238,13 +184,9 @@ export function TransportBookingDocument({
           </View>
         </View>
 
-        {/* One block per segment, in entry order — same as Hotel's
-            "Hotel 1", "Hotel 2". */}
         {booking.segments.map((s, i) => (
           <View key={i} wrap={false}>
-            <View style={styles.entryTitleBar}>
-              <Text style={styles.entryTitle}>Transfer {i + 1} — {s.sector}</Text>
-            </View>
+            <View style={styles.entryTitleBar}><Text style={styles.entryTitle}>Transfer {i + 1} — {s.sector}</Text></View>
             <View style={styles.table}>
               <View style={styles.tableHeaderRow}>
                 <Text style={[styles.th, { flex: 1.3 }]}>Vehicle</Text>
@@ -253,13 +195,8 @@ export function TransportBookingDocument({
                 <Text style={[styles.th, { flex: 0.9 }]}>Time</Text>
                 <Text style={[styles.th, { flex: 0.5 }]}>Qty</Text>
                 {isInvoice ? (
-                  <>
-                    <Text style={[styles.th, { flex: 1 }]}>Rate</Text>
-                    <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text>
-                  </>
+                  showBreakdown ? <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text> : null
                 ) : (
-                  // Driver's number is the whole point of a transport
-                  // voucher — the client calls the driver, not the office.
                   <Text style={[styles.th, { flex: 1.4 }]}>Driver Contact</Text>
                 )}
               </View>
@@ -270,14 +207,7 @@ export function TransportBookingDocument({
                 <Text style={[styles.td, { flex: 0.9 }]}>{s.pickupTime || "—"}</Text>
                 <Text style={[styles.td, { flex: 0.5 }]}>{s.qty}</Text>
                 {isInvoice ? (
-                  <>
-                    {/* Selling only — buying cost and profit never appear
-                        on either document. */}
-                    <Text style={[styles.td, { flex: 1 }]}>
-                      {money(s.qty > 0 ? s.sellingPrice / s.qty : s.sellingPrice, booking.currency)}
-                    </Text>
-                    <Text style={[styles.td, { flex: 1 }]}>{money(s.sellingPrice, booking.currency)}</Text>
-                  </>
+                  showBreakdown ? <Text style={[styles.td, { flex: 1 }]}>{money(s.sellingPrice, booking.currency)}</Text> : null
                 ) : (
                   <Text style={[styles.td, { flex: 1.4 }]}>{s.driverContact || "To be advised"}</Text>
                 )}
@@ -292,31 +222,20 @@ export function TransportBookingDocument({
               <Text style={styles.notesTitle}>Notes</Text>
               <Text style={styles.notesText}>{booking.note || "—"}</Text>
             </View>
-
             <View style={styles.summaryBox}>
               <View style={styles.summaryLine}><Text style={styles.infoLabel}>Subtotal</Text><Text>{money(grossSelling, booking.currency)}</Text></View>
-              {booking.discount > 0 && (
-                <View style={styles.summaryLine}><Text style={styles.infoLabel}>Discount</Text><Text>-{money(booking.discount, booking.currency)}</Text></View>
-              )}
+              {booking.discount > 0 && <View style={styles.summaryLine}><Text style={styles.infoLabel}>Discount</Text><Text>-{money(booking.discount, booking.currency)}</Text></View>}
               <View style={styles.summaryLine}><Text style={styles.infoLabel}>VAT ({booking.vatPercent || 0}%)</Text><Text>{money(totals.taxAmount, booking.currency)}</Text></View>
-              <View style={styles.summaryTotalLine}>
-                <Text style={styles.summaryTotalLabel}>TOTAL PRICE</Text>
-                <Text style={styles.summaryTotalValue}>{money(totals.netTotal, booking.currency)}</Text>
-              </View>
+              <View style={styles.summaryTotalLine}><Text style={styles.summaryTotalLabel}>TOTAL PRICE</Text><Text style={styles.summaryTotalValue}>{money(totals.netTotal, booking.currency)}</Text></View>
               <View style={styles.summaryLine}><Text style={styles.infoLabel}>Total Paid</Text><Text>{money(totalPaid, booking.currency)}</Text></View>
-              <View style={styles.summaryTotalLine}>
-                <Text style={styles.summaryTotalLabel}>REMAINING BALANCE</Text>
-                <Text style={styles.summaryTotalValue}>{money(remainingBalance, booking.currency)}</Text>
-              </View>
+              <View style={styles.summaryTotalLine}><Text style={styles.summaryTotalLabel}>REMAINING BALANCE</Text><Text style={styles.summaryTotalValue}>{money(remainingBalance, booking.currency)}</Text></View>
             </View>
           </View>
         )}
 
         {isInvoice && booking.payments && booking.payments.length > 0 && (
           <View wrap={false}>
-            <View style={styles.paymentHistoryBar}>
-              <Text style={styles.paymentHistoryTitle}>Payment History</Text>
-            </View>
+            <View style={styles.paymentHistoryBar}><Text style={styles.paymentHistoryTitle}>Payment History</Text></View>
             <View style={styles.paymentTable}>
               <View style={styles.tableHeaderRow}>
                 <Text style={[styles.th, { flex: 1.2 }]}>Date</Text>
@@ -328,9 +247,7 @@ export function TransportBookingDocument({
                 <View key={i} style={styles.tableRow}>
                   <Text style={[styles.td, { flex: 1.2 }]}>{fmtDate(p.paidOn)}</Text>
                   <Text style={[styles.td, { flex: 1 }]}>{money(p.amount, booking.currency)}</Text>
-                  <Text style={[styles.td, { flex: 1.6 }]}>
-                    {p.bankAccount ? `${p.bankAccount.bankName || p.bankAccount.accountName} (Bank Transfer)` : "Cash"}
-                  </Text>
+                  <Text style={[styles.td, { flex: 1.6 }]}>{p.bankAccount ? `${p.bankAccount.bankName || p.bankAccount.accountName} (Bank Transfer)` : "Cash"}</Text>
                   <Text style={[styles.td, { flex: 1.6 }]}>{p.note || "—"}</Text>
                 </View>
               ))}
@@ -346,9 +263,7 @@ export function TransportBookingDocument({
                 {agency.bankAccounts.length === 0 && <Text style={styles.footerText}>—</Text>}
                 {agency.bankAccounts.map((acc, i) => (
                   <View key={i} style={{ marginBottom: i < agency.bankAccounts.length - 1 ? 6 : 0 }}>
-                    {agency.bankAccounts.length > 1 && (
-                      <Text style={[styles.footerText, { fontFamily: "Helvetica-Bold" }]}>Account {i + 1}</Text>
-                    )}
+                    {agency.bankAccounts.length > 1 && <Text style={[styles.footerText, { fontFamily: "Helvetica-Bold" }]}>Account {i + 1}</Text>}
                     {acc.accountName && <Text style={styles.footerText}>Account Name: {acc.accountName}</Text>}
                     {acc.bankName && <Text style={styles.footerText}>Bank: {acc.bankName}</Text>}
                     {acc.accountNo && <Text style={styles.footerText}>Account No: {acc.accountNo}</Text>}
@@ -368,23 +283,18 @@ export function TransportBookingDocument({
               {verifyQrDataUri && (
                 <View style={styles.qrBlock}>
                   <Image src={verifyQrDataUri} style={styles.qrImage} />
-                  <Text style={styles.qrCaption}>Scan to Verify{"\n"}Hajj & Umrah Services</Text>
+                  <Text style={styles.qrCaption}>Scan to Verify</Text>
                 </View>
               )}
             </View>
           )}
-
           {agency.cancellationPolicy && <Text style={styles.policyText}>Cancellation Policy: {agency.cancellationPolicy}</Text>}
           {agency.noShowPolicy && <Text style={styles.policyText}>No-Show Policy: {agency.noShowPolicy}</Text>}
-
           <View style={styles.signOff}>
             <Text style={styles.signOffText}>Dear {booking.guestName},</Text>
             <Text style={styles.signOffText}>Thank you for choosing us — we look forward to serving you.</Text>
           </View>
-
-          {agency.address && (
-            <Text style={[styles.policyText, { textAlign: "center", marginTop: 10 }]}>{agency.address}</Text>
-          )}
+          {agency.address && <Text style={[styles.policyText, { textAlign: "center", marginTop: 10 }]}>{agency.address}</Text>}
         </View>
       </Page>
     </Document>

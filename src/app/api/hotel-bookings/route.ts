@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
-import { auth } from "../../../../auth"; // Adjust this relative path if needed to match your project
+import { auth } from "../../../../auth";
+import { getNextSequenceNumber } from "@/src/lib/sequenceHelpers";
 
 // ==========================================
 // 1. GET HANDLER: Fetch all hotel bookings
@@ -14,13 +15,10 @@ export async function GET() {
 
     const bookings = await prisma.hotelBooking.findMany({
       where: { agencyId: session.user.agencyId },
-      include: { hotels: true },
+      include: { hotels: { include: { vendor: true } } },
       orderBy: { createdAt: "desc" },
     });
 
-    // Phase 1: attach totalPaid per booking in one grouped query instead of
-    // an N+1 fetch per row — the Manage page's Remaining Balance column
-    // reads this directly rather than calling /api/payments per booking.
     const paidTotals = await prisma.payment.groupBy({
       by: ["bookingId"],
       where: { bookingType: "hotel", bookingId: { in: bookings.map((b) => b.id) } },
@@ -48,12 +46,13 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    // Item 5 (round 3): exchange rate is required now — a booking with no
-    // rate has no way to compute the agency's converted revenue/profit.
     if (!body.exchangeRate || parseFloat(body.exchangeRate) <= 0) {
       return NextResponse.json({ error: "Exchange rate is required" }, { status: 400 });
     }
-
+    
+    // ...inside POST, before prisma.hotelBooking.create:
+    const voucherNumber = await getNextSequenceNumber(session.user.agencyId, "hotel");
+    
     const booking = await prisma.hotelBooking.create({
       data: {
         agencyId: session.user.agencyId,
@@ -62,16 +61,19 @@ export async function POST(request: Request) {
         nationality: body.nationality,
         mobileNo: body.mobileNo || null,
         referenceNo: body.referenceNo || null,
+        // ...then add to the data object:
+        voucherNumber,
         currency: body.currency || "PKR",
         discount: parseFloat(body.discount) || 0,
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || "Cash",
         note: body.note || null,
-        vendorName: body.vendorName || null,
         paymentStatus: body.paymentStatus || "Pending",
+        showBreakdown: !!body.showBreakdown,
         exchangeRate: parseFloat(body.exchangeRate) || 0,
         hotels: {
           create: (body.hotels || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             hotelName: row.hotelName,
             city: row.city,
             roomType: row.roomType,
@@ -83,15 +85,12 @@ export async function POST(request: Request) {
             infants: parseInt(row.infants) || 0,
             mealPlan: row.mealPlan || "RO",
             confirmationNo: row.confirmationNo || null,
-            // Phase 1a — replaces buyingCostPerNight/sellingPricePerNight
-            adultBuyingPricePerNight: parseFloat(row.adultBuyingPricePerNight) || 0,
-            adultSellingPricePerNight: parseFloat(row.adultSellingPricePerNight) || 0,
-            childBuyingPricePerNight: parseFloat(row.childBuyingPricePerNight) || 0,
-            childSellingPricePerNight: parseFloat(row.childSellingPricePerNight) || 0,
+            buyingRatePerNight: parseFloat(row.buyingRatePerNight) || 0,
+            sellingRatePerNight: parseFloat(row.sellingRatePerNight) || 0,
           })),
         },
       },
-      include: { hotels: true },
+      include: { hotels: { include: { vendor: true } } },
     });
 
     return NextResponse.json(booking, { status: 201 });

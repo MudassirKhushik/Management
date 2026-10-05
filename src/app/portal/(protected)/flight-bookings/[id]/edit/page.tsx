@@ -1,5 +1,3 @@
-// src/app/portal/(protected)/flight-bookings/[id]/edit/page.tsx
-
 "use client";
 
 import { useEffect, useState } from "react";
@@ -8,6 +6,7 @@ import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
 import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 import FlightSegmentFields from "@/src/components/booking/FlightSegmentFields";
+import Spinner from "@/src/components/ui/Spinner";
 import {
   emptyGlobalHeader,
   emptyFooterData,
@@ -17,12 +16,6 @@ import {
 import { FlightRow, emptyFlightRow, TRAVEL_CLASSES } from "@/src/lib/flightBookingTypes";
 import { calculateFlightSegmentTotals, sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
 
-const inputClass =
-  "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
-const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
-
-// <input type="datetime-local"> needs "YYYY-MM-DDTHH:mm" — an ISO string
-// from the API has seconds and a timezone suffix the input silently rejects.
 function toLocalInput(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -38,7 +31,7 @@ export default function EditFlightBookingPage() {
 
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
-  const [vendorName, setVendorName] = useState("");
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [segments, setSegments] = useState<FlightRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -65,10 +58,11 @@ export default function EditFlightBookingPage() {
           paymentType: data.paymentType || "",
           note: data.note || "",
         });
-        setVendorName(data.vendorName || "");
+        setShowBreakdown(!!data.showBreakdown);
         setSegments(
           data.segments.map((s: any) => ({
             id: s.id,
+            vendorId: s.vendorId || "",
             airline: s.airline,
             flightNo: s.flightNo,
             pnr: s.pnr || "",
@@ -81,7 +75,6 @@ export default function EditFlightBookingPage() {
             children: s.children,
             infants: s.infants,
             baggage: s.baggage || "",
-            // Stored as one newline-separated column, edited as an array.
             passengerNames: s.passengerNames
               ? s.passengerNames.split("\n").filter(Boolean)
               : [""],
@@ -134,7 +127,7 @@ export default function EditFlightBookingPage() {
       const res = await fetch(`/api/flight-bookings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, segments }),
+        body: JSON.stringify({ ...header, ...footer, showBreakdown, segments }),
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -149,7 +142,7 @@ export default function EditFlightBookingPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
 
   return (
     <div className="max-w-full mx-auto p-4 md:p-6">
@@ -160,22 +153,6 @@ export default function EditFlightBookingPage() {
           value={header}
           onChange={(field, value) => setHeader((h) => ({ ...h, [field]: value }))}
         />
-
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Vendor
-          </h2>
-          <div>
-            <label className={labelClass}>Vendor Name</label>
-            <input
-              type="text"
-              className={inputClass}
-              placeholder="Who you bought these tickets from (consolidator, not the sales agent)"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-            />
-          </div>
-        </section>
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
@@ -205,6 +182,27 @@ export default function EditFlightBookingPage() {
           </button>
         </section>
 
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--agency-color)" }}>
+                Show Breakdown on Invoice
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-1">
+                When off, the client's Invoice shows only the overall total. Turn on to also show each flight's per-pax rate and Sell Total.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showBreakdown ? "" : "bg-gray-200"}`}
+              style={showBreakdown ? { backgroundColor: "var(--agency-color)" } : undefined}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBreakdown ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </section>
+
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
@@ -226,8 +224,6 @@ export default function EditFlightBookingPage() {
         </button>
       </form>
 
-      {/* Outside the <form> — PaymentHistorySection has its own form inside
-          it, and nested forms are invalid HTML. */}
       <div className="mt-5">
         <PaymentHistorySection
           bookingType="flight"

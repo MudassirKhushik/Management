@@ -11,6 +11,7 @@ import {
   remainingBalanceTier,
 } from "@/src/lib/pricingCalculations";
 import QuickPaymentForm, { QuickPaymentPayload } from "@/src/components/booking/QuickPaymentForm";
+import Spinner from "@/src/components/ui/Spinner";
 
 type HotelEntry = {
   hotelName: string;
@@ -18,12 +19,9 @@ type HotelEntry = {
   checkIn: string;
   checkOut: string;
   rooms: number;
-  adults: number;
-  children: number;
-  adultBuyingPricePerNight: number;
-  adultSellingPricePerNight: number;
-  childBuyingPricePerNight: number;
-  childSellingPricePerNight: number;
+  buyingRatePerNight: number;
+  sellingRatePerNight: number;
+  vendor: { id: string; name: string } | null;
 };
 
 type HotelBookingWithEntries = {
@@ -31,7 +29,6 @@ type HotelBookingWithEntries = {
   guestName: string;
   mobileNo: string;
   agentName: string;
-  vendorName: string | null;
   paymentStatus: string | null;
   currency: string;
   discount: number;
@@ -39,7 +36,7 @@ type HotelBookingWithEntries = {
   createdAt: string;
   hotels: HotelEntry[];
   totalPaid: number;
-  exchangeRate: number; // Item 2 — booking prices are in SAR, this converts to PKR for reporting
+  exchangeRate: number;
 };
 
 const STATUS_COLOR: Record<string, string> = {
@@ -53,8 +50,6 @@ const TIER_CLASS: Record<string, string> = {
   unpaid: "bg-red-50 text-red-700 border-red-200",
   none: "bg-gray-50 text-gray-500 border-gray-200",
 };
-// Round 6: Remaining Balance font weight/size also escalates with urgency —
-// fully unpaid stands out more than a small remaining balance.
 const TIER_FONT: Record<string, string> = {
   paid: "text-xs font-medium",
   partial: "text-xs font-semibold",
@@ -185,11 +180,6 @@ export default function ManageHotelBookingsPage() {
     }
   }
 
-  // Round 7: no manual status control at all — Pending/Partially Paid/Paid
-  // are always derived from payments received. Cancelling a booking now
-  // means deleting it (the Delete button already exists), so the earlier
-  // Cancel/Reactivate actions are gone.
-
   async function handleQuickPayment(bookingId: string, payload: QuickPaymentPayload) {
     setPaymentSaving(true);
     try {
@@ -219,7 +209,7 @@ export default function ManageHotelBookingsPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading bookings..." />;
   if (error) return <p className="p-6 text-red-600">{error}</p>;
 
   const filtered = bookings.filter((b) => {
@@ -229,13 +219,11 @@ export default function ManageHotelBookingsPage() {
       b.guestName.toLowerCase().includes(q) ||
       b.mobileNo?.toLowerCase().includes(q) ||
       b.agentName.toLowerCase().includes(q) ||
-      (b.vendorName || "").toLowerCase().includes(q) ||
-      b.hotels.some((h) => h.hotelName.toLowerCase().includes(q))
+      b.hotels.some((h) => h.hotelName.toLowerCase().includes(q)) ||
+      b.hotels.some((h) => (h.vendor?.name || "").toLowerCase().includes(q))
     );
   });
 
-  // Item 1 (round 3): back to one column per hotel, as many as the widest
-  // booking needs — reverted from the single-column summary.
   const maxHotels = Math.max(1, ...bookings.map((b) => b.hotels.length));
 
   return (
@@ -275,7 +263,8 @@ export default function ManageHotelBookingsPage() {
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Net Total (PKR)</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Profit (PKR)</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Remaining ({filtered[0]?.currency || "SAR"})</th>
-              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendor</th>
+              {/* Item 2: one column, all vendors joined in entry order */}
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendors</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Agent</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Payment</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Actions</th>
@@ -295,11 +284,6 @@ export default function ManageHotelBookingsPage() {
                 discount: booking.discount,
                 vatPercent: booking.vatPercent,
               });
-              // Item 2: hotel prices are entered in SAR (booking.currency),
-              // but revenue/profit needs to be currency-aware for accurate
-              // reporting — converted to PKR using this booking's exchange
-              // rate. Remaining Balance stays in SAR since that's what the
-              // client actually still owes.
               const rate = booking.exchangeRate || 1;
               const convertedNetTotal = totals.netTotal * rate;
               const convertedProfit = totals.profit * rate;
@@ -307,6 +291,7 @@ export default function ManageHotelBookingsPage() {
               const tier = remainingBalanceTier(remaining, totals.netTotal);
               const isPaymentRowOpen = paymentRowId === booking.id;
               const actionColSpan = maxHotels + 8;
+              const vendorSummary = booking.hotels.map((h) => h.vendor?.name || "—").join(" + ");
 
               return (
                 <Fragment key={booking.id}>
@@ -330,11 +315,9 @@ export default function ManageHotelBookingsPage() {
                         {tier === "paid" ? "Paid" : remaining.toFixed(2)}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{vendorSummary}</td>
                     <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
                     <td className="px-4 py-3">
-                      {/* Round 7: pure read-only badge, no actions here at
-                          all — delete the booking if it needs cancelling. */}
                       <span
                         className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${
                           STATUS_COLOR[booking.paymentStatus || "Pending"]

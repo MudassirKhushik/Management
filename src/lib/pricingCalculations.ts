@@ -23,33 +23,25 @@ export function calculateNights(checkIn: Date | string, checkOut: Date | string)
   return nights > 0 ? nights : 0;
 }
 
+// ---------- Hotel entries: simple room x night pricing (confirmed final) ----------
+
 export type HotelEntryForCalc = {
   checkIn: Date | string;
   checkOut: Date | string;
   rooms: number;
-  adults: number;
-  children: number;
-  adultBuyingPricePerNight: number;
-  adultSellingPricePerNight: number;
-  childBuyingPricePerNight: number;
-  childSellingPricePerNight: number;
+  buyingRatePerNight: number;
+  sellingRatePerNight: number;
 };
 
-// Adult/Child pricing is per person, per night, per room — and `rooms`
-// still multiplies in, because the adults/children counts describe the
-// occupancy of ONE room, not the whole booking. Example: 2 rooms, each
-// with 2 adults, adult rate 100/night, 3 nights → 3 × 2 × (2×100) = 1200,
-// not 3 × (2×100) = 600. Fixed after real-world testing caught this.
+// Total = nights x rooms x rate. No adult/child math anymore — this was an
+// explicit change away from per-person pricing. Same formula is reused
+// inside Package Booking's hotel rows via calculatePackageLineItems below.
 export function calculateHotelEntryTotals(entry: HotelEntryForCalc) {
   const nights = calculateNights(entry.checkIn, entry.checkOut);
-  const adults = entry.adults || 0;
-  const children = entry.children || 0;
   const rooms = entry.rooms || 1;
 
-  const buyingTotal =
-    nights * rooms * (adults * (entry.adultBuyingPricePerNight || 0) + children * (entry.childBuyingPricePerNight || 0));
-  const sellingTotal =
-    nights * rooms * (adults * (entry.adultSellingPricePerNight || 0) + children * (entry.childSellingPricePerNight || 0));
+  const buyingTotal = nights * rooms * (entry.buyingRatePerNight || 0);
+  const sellingTotal = nights * rooms * (entry.sellingRatePerNight || 0);
 
   return { nights, buyingTotal, sellingTotal };
 }

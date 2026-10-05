@@ -15,7 +15,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
   try {
     const booking = await prisma.hotelBooking.findUnique({
       where: { id },
-      include: { hotels: true },
+      include: { hotels: { include: { vendor: true } } },
     });
 
     if (!booking || booking.agencyId !== session.user.agencyId) {
@@ -64,11 +64,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         vatPercent: body.vatPercent || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
-        vendorName: body.vendorName || null,
         paymentStatus: body.paymentStatus || "Pending",
+        showBreakdown: !!body.showBreakdown,
         exchangeRate: parseFloat(body.exchangeRate) || 0,
         hotels: {
           create: (body.hotels || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             hotelName: row.hotelName,
             city: row.city,
             roomType: row.roomType,
@@ -80,15 +81,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
             infants: row.infants,
             mealPlan: row.mealPlan || null,
             confirmationNo: row.confirmationNo || null,
-            // Phase 1a — replaces buyingCostPerNight/sellingPricePerNight
-            adultBuyingPricePerNight: parseFloat(row.adultBuyingPricePerNight) || 0,
-            adultSellingPricePerNight: parseFloat(row.adultSellingPricePerNight) || 0,
-            childBuyingPricePerNight: parseFloat(row.childBuyingPricePerNight) || 0,
-            childSellingPricePerNight: parseFloat(row.childSellingPricePerNight) || 0,
+            buyingRatePerNight: parseFloat(row.buyingRatePerNight) || 0,
+            sellingRatePerNight: parseFloat(row.sellingRatePerNight) || 0,
           })),
         },
       },
-      include: { hotels: true },
+      include: { hotels: { include: { vendor: true } } },
     });
 
     return NextResponse.json(booking);
@@ -98,8 +96,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
 }
 
-// PATCH: quick single-field update (used by the Manage page's inline
-// Payment Status dropdown — doesn't touch anything else on the booking)
+// PATCH: quick single-field update (kept for compatibility — not used by
+// the Manage page anymore since manual status control was removed, but
+// left in place in case anything else still calls it)
 export async function PATCH(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const session = await auth();
   if (!session?.user?.agencyId) {
@@ -118,6 +117,7 @@ export async function PATCH(request: Request, { params }: { params: Promise<{ id
       where: { id },
       data: {
         ...(body.paymentStatus !== undefined ? { paymentStatus: body.paymentStatus } : {}),
+        ...(body.showBreakdown !== undefined ? { showBreakdown: !!body.showBreakdown } : {}),
       },
     });
 

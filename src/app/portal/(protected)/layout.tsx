@@ -23,14 +23,35 @@ import {
   IconBell,
 } from "@/src/components/portal/NavIcons";
 
+// Custom standard icons for Vendors and Reports to match your theme structure
+function IconVendor() {
+  return (
+    <svg xmlns="http://w3.org" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M18 18.72a9.094 9.094 0 0 0 3.741-.479 3 3 0 0 0-4.682-2.72m.94 3.198.001.031c0 .225-.012.447-.037.666A11.944 11.944 0 0 1 12 21c-2.17 0-4.207-.576-5.963-1.584A6.062 6.062 0 0 1 6 18.719m12 0a5.971 5.971 0 0 0-.941-3.197m0 0A5.995 5.995 0 0 0 12 12.75a5.995 5.995 0 0 0-5.058 2.772m0 0a3 3 0 0 0-4.681 2.72 8.986 8.986 0 0 0 3.74.477m.94-3.197a5.971 5.971 0 0 0-.94 3.197M15 6.75a3 3 0 1 1-6 0 3 3 0 0 1 6 0Zm6 3a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zm-13.5 0a2.25 2.25 0 1 1-4.5 0 2.25 2.25 0 0 1 4.5 0Zs" />
+    </svg>
+  );
+}
+
+function IconReport() {
+  return (
+    <svg xmlns="http://w3.org" fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor" className="w-5 h-5">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M3.75 3v11.25A2.25 2.25 0 0 0 6 16.5h2.25M3.75 3h-1.5m1.5 0h16.5m0 0h1.5m-1.5 0v11.25A2.25 2.25 0 0 1 18 16.5h-2.25m-7.5 0h7.5m-7.5 0-1 3m8.5-3 1 3m0 0h.5m-.5 0h-10.5m0 0h-.5m5.25-15.75A1.5 1.5 0 0 1 12 3v3.75m0 0a1.5 1.5 0 0 1-1.5 1.5H8.25m3.75-1.5a1.5 1.5 0 0 0 1.5 1.5h2.25m-3.75-3V16.5" />
+    </svg>
+  );
+}
+
+// Visual layout helper for the "Soon" indicator tag
+function SoonBadge() {
+  return (
+    <span className="ml-auto text-[10px] font-bold uppercase tracking-wider bg-white/10 text-white/60 px-2 py-0.5 rounded-full border border-white/5 group-hover:text-white group-hover:bg-white/20 transition-colors">
+      Soon
+    </span>
+  );
+}
+
 export default async function PortalLayout({ children }: { children: React.ReactNode }) {
   const session = await auth();
 
-  // Read live from the database rather than trusting the session's cached
-  // snapshot — session.user.agencyLogoUrl/agencyColor are set once at
-  // login and DON'T update when the agency changes their logo/color via
-  // Settings. JWT sessions don't retroactively refresh, so without this,
-  // every branding change would require a manual log-out/log-in to show.
   const dbAgency = session?.user?.agencyId
     ? await prisma.agency.findUnique({
         where: { id: session.user.agencyId },
@@ -53,7 +74,6 @@ export default async function PortalLayout({ children }: { children: React.React
     <>
       <SidebarBrand logoUrl={agency.logoUrl} name={agency.name} />
 
-      {/* The only part that scrolls, between the brand and the logout button */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col gap-1 py-5 px-3">
         <RailNavLink href="/portal" icon={<IconDashboard />}>Dashboard</RailNavLink>
 
@@ -63,6 +83,15 @@ export default async function PortalLayout({ children }: { children: React.React
         </RailNavLink>
         <RailNavLink href="/portal/travelers/manage" icon={<IconPackage />} indent>
           Manage Packages
+        </RailNavLink>
+
+        {/* Vendors Management Section */}
+        <SidebarSectionLabel>Vendors</SidebarSectionLabel>
+        <RailNavLink href="/portal/vendors/add" icon={<IconVendor />} indent hideInRail>
+          Add Vendor
+        </RailNavLink>
+        <RailNavLink href="/portal/vendors/manage" icon={<IconVendor />} indent>
+          Manage Vendors
         </RailNavLink>
 
         <SidebarSectionLabel>Hotel</SidebarSectionLabel>
@@ -95,6 +124,29 @@ export default async function PortalLayout({ children }: { children: React.React
         </RailNavLink>
         <RailNavLink href="/portal/visa-bookings/manage" icon={<IconVisa />} indent>
           Manage Visas
+        </RailNavLink>
+
+        {/* Dynamic Static Reports Module (With Soon Badges) */}
+        <SidebarSectionLabel>Reports</SidebarSectionLabel>
+        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
+          <span className="flex-1 text-left">Daily Report</span>
+          <SoonBadge />
+        </RailNavLink>
+        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
+          <span className="flex-1 text-left">Monthly Report</span>
+          <SoonBadge />
+        </RailNavLink>
+        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
+          <span className="flex-1 text-left">Sales Report</span>
+          <SoonBadge />
+        </RailNavLink>
+        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
+          <span className="flex-1 text-left">Profit &amp; Loss</span>
+          <SoonBadge />
+        </RailNavLink>
+        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
+          <span className="flex-1 text-left">Outstanding Payments</span>
+          <SoonBadge />
         </RailNavLink>
 
         <SidebarSectionLabel>Marketing &amp; Settings</SidebarSectionLabel>

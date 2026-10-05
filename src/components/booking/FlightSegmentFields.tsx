@@ -1,13 +1,10 @@
 // src/components/booking/FlightSegmentFields.tsx
-//
-// One flight leg's worth of inputs. Shared by the flight Add and Edit pages
-// (and later the package wizard) so the passenger-list UI and the six
-// per-pax price fields only exist in one place.
 
 "use client";
 
 import { FlightRow, TRAVEL_CLASSES } from "@/src/lib/flightBookingTypes";
 import { calculateFlightSegmentTotals } from "@/src/lib/pricingCalculations";
+import VendorSelect from "@/src/components/booking/VendorSelect";
 
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
@@ -37,7 +34,6 @@ export default function FlightSegmentFields({
     onChange("passengerNames", [...row.passengerNames, ""]);
   }
   function removePassenger(i: number) {
-    // Always keep at least one input so the field never disappears entirely.
     const next = row.passengerNames.filter((_, idx) => idx !== i);
     onChange("passengerNames", next.length > 0 ? next : [""]);
   }
@@ -53,6 +49,11 @@ export default function FlightSegmentFields({
         >
           Remove
         </button>
+      </div>
+
+      <div className="mb-3">
+        <label className={labelClass}>Vendor (who we bought these tickets from)</label>
+        <VendorSelect value={row.vendorId} onChange={(v) => onChange("vendorId", v)} />
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -153,8 +154,6 @@ export default function FlightSegmentFields({
         </div>
       </div>
 
-      {/* Headcount drives the pricing below — 2 adults at 50,000 each is
-          100,000 for this leg. */}
       <div className="grid grid-cols-3 gap-3 mt-3">
         <div>
           <label className={labelClass}>Adults</label>
@@ -222,8 +221,6 @@ export default function FlightSegmentFields({
         </button>
       </div>
 
-      {/* Per passenger, per leg. Infants are priced here — unlike hotel,
-          where they're headcount-only. */}
       <div className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
           Price per Passenger ({currency})

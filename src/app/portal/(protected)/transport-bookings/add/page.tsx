@@ -1,18 +1,17 @@
-// src/app/portal/(protected)/transport-bookings/add/page.tsx
-
 "use client";
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
 import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
+import VendorSelect from "@/src/components/booking/VendorSelect";
 import {
   emptyGlobalHeader,
   emptyFooterData,
   GlobalHeaderData,
   FooterData,
 } from "@/src/lib/sharedBookingFields";
-import { TransportRow, VEHICLE_TYPES, emptyTransportRow } from "@/src/lib/transportBookingTypes";
+import { TransportRow, VEHICLE_SUGGESTIONS, emptyTransportRow } from "@/src/lib/transportBookingTypes";
 import { sumLineItems } from "@/src/lib/pricingCalculations";
 
 const inputClass =
@@ -23,13 +22,10 @@ export default function AddTransportBookingPage() {
   const router = useRouter();
   const [header, setHeader] = useState<GlobalHeaderData>({ ...emptyGlobalHeader, currency: "PKR" });
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
-  const [vendorName, setVendorName] = useState("");
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [segments, setSegments] = useState<TransportRow[]>([emptyTransportRow()]);
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
-
-  // Add-mode initial payment — becomes a real Payment row right after the
-  // booking is created.
   const [initialPaidAmount, setInitialPaidAmount] = useState("");
   const [initialBankAccountId, setInitialBankAccountId] = useState("");
 
@@ -55,7 +51,7 @@ export default function AddTransportBookingPage() {
       const res = await fetch("/api/transport-bookings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, segments }),
+        body: JSON.stringify({ ...header, ...footer, showBreakdown, segments }),
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -63,8 +59,6 @@ export default function AddTransportBookingPage() {
       }
       const created = await res.json();
 
-      // Separate step: the booking must exist before a Payment can point at
-      // it. A failure here shouldn't lose the booking — it's already saved.
       const paid = parseFloat(initialPaidAmount);
       if (paid > 0) {
         const payRes = await fetch("/api/payments", {
@@ -104,22 +98,6 @@ export default function AddTransportBookingPage() {
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Vendor
-          </h2>
-          <div>
-            <label className={labelClass}>Vendor Name</label>
-            <input
-              type="text"
-              className={inputClass}
-              placeholder="Who you booked this transport from (supplier, not the sales agent)"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-            />
-          </div>
-        </section>
-
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
             Transfers
           </h2>
 
@@ -137,19 +115,26 @@ export default function AddTransportBookingPage() {
                   </button>
                 </div>
 
+                <div className="mb-3">
+                  <label className={labelClass}>Vendor (who we booked this transport from)</label>
+                  <VendorSelect value={row.vendorId} onChange={(v) => updateRow(row.id, "vendorId", v)} />
+                </div>
+
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                   <div>
                     <label className={labelClass}>Vehicle</label>
-                    <select
+                    <input
+                      list="vehicle-suggestions"
+                      type="text"
                       className={inputClass}
+                      placeholder="e.g. Hiace, Camry, Coaster"
                       value={row.vehicle}
                       onChange={(e) => updateRow(row.id, "vehicle", e.target.value)}
                       required
-                    >
-                      {VEHICLE_TYPES.map((v) => (
-                        <option key={v} value={v}>{v}</option>
-                      ))}
-                    </select>
+                    />
+                    <datalist id="vehicle-suggestions">
+                      {VEHICLE_SUGGESTIONS.map((v) => <option key={v} value={v} />)}
+                    </datalist>
                   </div>
                   <div>
                     <label className={labelClass}>Sector</label>
@@ -238,12 +223,32 @@ export default function AddTransportBookingPage() {
           </button>
         </section>
 
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--agency-color)" }}>
+                Show Breakdown on Invoice
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-1">
+                When off, the client's Invoice shows only the overall total. Turn on to also show each transfer's Sell Total.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showBreakdown ? "" : "bg-gray-200"}`}
+              style={showBreakdown ? { backgroundColor: "var(--agency-color)" } : undefined}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBreakdown ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </section>
+
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
           grossBuying={grossBuying}
           grossSelling={grossSelling}
-          bookingType="transport"
           initialPaidAmount={initialPaidAmount}
           onInitialPaidAmountChange={setInitialPaidAmount}
           initialBankAccountId={initialBankAccountId}

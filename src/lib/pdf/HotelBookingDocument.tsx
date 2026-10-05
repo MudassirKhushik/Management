@@ -1,17 +1,11 @@
 // src/lib/pdf/HotelBookingDocument.tsx
 //
-// Voucher = client-facing, carried through the airport. Zero pricing, zero
-//   bank details. Shows Makkah/Madinah/Hotline contacts + a QR code linking
-//   to a public verification page (Item 7).
-// Invoice = internal/payment document. Shows SELLING price only per hotel
-//   (rate/night -> total) — never buying cost or profit (Item 9). Includes
-//   bank details, Payment History, Total Paid / Remaining Balance, and a
-//   Notes + Exchange-Rate-Note box placed beside the price summary (Item 10).
-//
-// Hotels are listed in the order they were entered — "Hotel 1", "Hotel 2",
-// "Hotel 3" — not grouped/re-ordered by city (Items 5 & 8).
-//
-// agency.primaryColor drives every accent color here — already per-agency.
+// Voucher = client-facing. Zero pricing, zero bank details. Shows
+//   Makkah/Madinah/Hotline + QR to the agency verification page.
+// Invoice = internal/payment document. No Rate/Night column at all now.
+//   Sell Total per hotel only shows when showBreakdown is true — the
+//   agency owner's toggle, off by default. Bank details + Payment History
+//   + Notes/summary box stay as before.
 
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import {
@@ -34,10 +28,9 @@ type HotelEntry = {
   infants: number;
   mealPlan: string | null;
   confirmationNo: string | null;
-  adultBuyingPricePerNight: number;
-  adultSellingPricePerNight: number;
-  childBuyingPricePerNight: number;
-  childSellingPricePerNight: number;
+  buyingRatePerNight: number;
+  sellingRatePerNight: number;
+  vendor?: { name: string } | null;
 };
 
 type PaymentEntry = {
@@ -60,10 +53,11 @@ type BookingData = {
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  exchangeRate: number; // Item 5 (round 3) — required, e.g. 1 SAR = 75 PKR
+  exchangeRate: number;
   createdAt: string | Date;
   hotels: HotelEntry[];
   payments: PaymentEntry[];
+  voucherNumber: string | null;
 };
 
 type AgencyData = {
@@ -82,7 +76,6 @@ type AgencyData = {
   makkahContact: string | null;
   madinahContact: string | null;
   hotlineContact: string | null;
-  // Round 4 — Agency Info
   address: string | null;
   branches: string | null;
   licenseNo: string | null;
@@ -109,12 +102,14 @@ export function HotelBookingDocument({
   booking,
   agency,
   variant,
-  verifyQrDataUri, // Item 7 — generated server-side in the PDF route, voucher-only
+  verifyQrDataUri,
+  showBreakdown,
 }: {
   booking: BookingData;
   agency: AgencyData;
   variant: "invoice" | "voucher";
   verifyQrDataUri?: string | null;
+  showBreakdown?: boolean;
 }) {
   const isInvoice = variant === "invoice";
   const accent = agency.primaryColor || "#D2232A";
@@ -203,9 +198,6 @@ export function HotelBookingDocument({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
-          {/* Item 3 (round 4, confirmed): ONLY the big logo when one exists
-              — no name alongside it. Falls back to just the name (large)
-              when there's no logo. Branches list sits underneath either way. */}
           <View style={styles.logoRow}>
             {agency.logoUrl ? (
               <Image src={agency.logoUrl} style={styles.logoBig} />
@@ -219,7 +211,7 @@ export function HotelBookingDocument({
           <View style={styles.docTitleBlock}>
             <Text style={styles.docTitle}>{isInvoice ? "INVOICE" : "VOUCHER"}</Text>
             <View style={styles.badgeRow}>
-              <Text style={styles.badge}>REF {booking.referenceNo || booking.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.badge}>{booking.voucherNumber || "—"}</Text>
               <Text style={styles.badge}>{fmtDate(booking.createdAt)}</Text>
             </View>
             {agency.licenseNo && <Text style={styles.licenseText}>License No: {agency.licenseNo}</Text>}
@@ -259,8 +251,6 @@ export function HotelBookingDocument({
           </View>
         </View>
 
-        {/* Items 5 & 8: hotels listed in entry order — "Hotel 1", "Hotel 2",
-            "Hotel 3" — never grouped/reordered by city. */}
         {booking.hotels.map((h, i) => (
           <View key={i} wrap={false}>
             <View style={styles.hotelTitleBar}>
@@ -277,10 +267,12 @@ export function HotelBookingDocument({
                 <Text style={[styles.th, { flex: 0.9 }]}>Guests</Text>
                 <Text style={[styles.th, { flex: 0.7 }]}>Meal</Text>
                 {isInvoice ? (
-                  <>
-                    <Text style={[styles.th, { flex: 1.1 }]}>Rate / Night</Text>
-                    <Text style={[styles.th, { flex: 0.9 }]}>Sell Total</Text>
-                  </>
+                  // Item 5: Rate/Night column removed entirely. Sell Total
+                  // only appears when the agency owner has turned the
+                  // "Show Breakdown" toggle on.
+                  showBreakdown ? (
+                    <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text>
+                  ) : null
                 ) : (
                   <Text style={[styles.th, { flex: 1 }]}>Conf. No.</Text>
                 )}
@@ -297,14 +289,9 @@ export function HotelBookingDocument({
                 </Text>
                 <Text style={[styles.td, { flex: 0.7 }]}>{h.mealPlan || "—"}</Text>
                 {isInvoice ? (
-                  <>
-                    {/* Item 9: SELLING rate/total only — never buying cost or profit */}
-                    <Text style={[styles.td, { flex: 1.1 }]}>
-                      A: {money(h.adultSellingPricePerNight, booking.currency)}
-                      {h.children > 0 ? ` / C: ${money(h.childSellingPricePerNight, booking.currency)}` : ""}
-                    </Text>
-                    <Text style={[styles.td, { flex: 0.9 }]}>{money(rowTotals[i].sellingTotal, booking.currency)}</Text>
-                  </>
+                  showBreakdown ? (
+                    <Text style={[styles.td, { flex: 1 }]}>{money(rowTotals[i].sellingTotal, booking.currency)}</Text>
+                  ) : null
                 ) : (
                   <Text style={[styles.td, { flex: 1 }]}>{h.confirmationNo || "—"}</Text>
                 )}
@@ -313,9 +300,6 @@ export function HotelBookingDocument({
           </View>
         ))}
 
-        {/* Item 10: Notes (+ Exchange Rate Note, Item 6) sit beside the price
-            summary box instead of the empty space next to it going to waste.
-            Invoice only — matches where the old summary box used to be. */}
         {isInvoice && (
           <View style={styles.priceRow}>
             <View style={styles.notesBox}>
@@ -397,7 +381,6 @@ export function HotelBookingDocument({
               </View>
             </View>
           ) : (
-            // Item 7: Makkah/Madinah/Hotline + QR code side by side
             <View style={styles.footerRow}>
               <View style={styles.footerCol}>
                 <Text style={styles.footerTitle}>Contact</Text>
@@ -408,7 +391,9 @@ export function HotelBookingDocument({
               {verifyQrDataUri && (
                 <View style={styles.qrBlock}>
                   <Image src={verifyQrDataUri} style={styles.qrImage} />
-                  <Text style={styles.qrCaption}>Scan to Verify{"\n"}Hajj & Umrah Services</Text>
+                  {/* Item 5: "Hajj & Umrah Services" line removed — this
+                      caption is now generic for any agency type. */}
+                  <Text style={styles.qrCaption}>Scan to Verify</Text>
                 </View>
               )}
             </View>
@@ -422,7 +407,6 @@ export function HotelBookingDocument({
             <Text style={styles.signOffText}>Thank you for choosing us — we look forward to serving you.</Text>
           </View>
 
-          {/* Round 4: Address at the very bottom of the page, as requested */}
           {agency.address && (
             <Text style={[styles.policyText, { textAlign: "center", marginTop: 10 }]}>{agency.address}</Text>
           )}
