@@ -6,7 +6,7 @@
 "use client";
 
 import { HotelRow, ROOM_TYPES, MEAL_PLANS } from "@/src/lib/hotelBookingTypes";
-import { TransportRow, VEHICLE_TYPES } from "@/src/lib/transportBookingTypes";
+import { TransportRow } from "@/src/lib/transportBookingTypes";
 import { VisaRow, PROCESSING_TYPES } from "@/src/lib/visaBookingTypes";
 import { calculateHotelEntryTotals } from "@/src/lib/pricingCalculations";
 
