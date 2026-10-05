@@ -1,5 +1,5 @@
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
-import { sumLineItems, calculateFooterTotals, sumPayments, calculateRemainingBalance } from "@/src/lib/pricingCalculations";
+import { sumLineItems, calculateFooterTotals, sumPayments, calculateRemainingBalance, calculateHotelEntryTotals } from "@/src/lib/pricingCalculations";
 
 type SegmentRow = {
   vehicle: string;
