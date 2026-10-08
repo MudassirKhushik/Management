@@ -3,6 +3,7 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../auth";
+import { getNextSequenceNumber } from "@/src/lib/sequenceHelpers";
 
 export async function GET() {
   try {
@@ -13,12 +14,10 @@ export async function GET() {
 
     const bookings = await prisma.visaBooking.findMany({
       where: { agencyId: session.user.agencyId },
-      include: { entries: true },
+      include: { entries: { include: { vendor: true } } },
       orderBy: { createdAt: "desc" },
     });
 
-    // Manage page needs a Remaining Balance per row. One groupBy for the
-    // whole list instead of an N+1 fetch per booking.
     const grouped = await prisma.payment.groupBy({
       by: ["bookingId"],
       where: {
@@ -48,11 +47,12 @@ export async function POST(request: Request) {
 
     const body = await request.json();
     const entriesList = body.entries || [];
+    const voucherNumber = await getNextSequenceNumber(session.user.agencyId, "visa");
 
     const booking = await prisma.visaBooking.create({
       data: {
-        // Never trust a client-sent agencyId — always derived from session.
         agencyId: session.user.agencyId,
+        voucherNumber,
         agentName: body.agentName,
         guestName: body.guestName,
         nationality: body.nationality,
@@ -63,12 +63,11 @@ export async function POST(request: Request) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
-        vendorName: body.vendorName || null,
-        // Always starts Pending. Status is never client-supplied — it's
-        // derived from the payment ledger's auto-flip from here on.
+        showBreakdown: !!body.showBreakdown,
         paymentStatus: "Pending",
         entries: {
           create: entriesList.map((row: any) => ({
+            vendorId: row.vendorId || null,
             visaCategory: row.visaCategory,
             applicantName: row.applicantName,
             passportNumber: row.passportNumber,
@@ -81,7 +80,7 @@ export async function POST(request: Request) {
           })),
         },
       },
-      include: { entries: true },
+      include: { entries: { include: { vendor: true } } },
     });
 
     return NextResponse.json(booking, { status: 201 });
