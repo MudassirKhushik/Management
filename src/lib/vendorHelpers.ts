@@ -3,13 +3,11 @@
 // Vendor ledger — what WE owe a vendor, entirely separate from the client
 // Payment ledger. Never appears on any client Invoice or Voucher.
 //
-// Currency rule: Hotel purchases are entered in SAR (same as the client
-// side), everything else (Transport/Flight/Visa) is entered in PKR
-// directly. Every vendor total, balance, and ledger line is expressed in
-// PKR — a hotel line's SAR amount is converted using THAT booking's own
-// exchangeRate (the rate recorded the day it was entered), never a
-// current/live rate. This keeps a vendor's running balance meaningful even
-// if they supplied a mix of hotels and transport/flights/visas.
+// Currency rule: Hotel purchases are entered in SAR, everything else
+// (Transport/Flight/Visa) is entered in PKR directly. Every vendor total,
+// balance, and ledger line is expressed in PKR — a hotel line's SAR amount
+// is converted using THAT booking's own exchangeRate (the rate recorded
+// when it was entered), never a current/live rate.
 
 import { prisma } from "@/src/lib/prisma";
 import { calculateHotelEntryTotals, calculateFlightSegmentTotals } from "@/src/lib/pricingCalculations";
@@ -19,9 +17,8 @@ export type VendorPurchaseLine = {
   bookingType: "hotel" | "transport" | "flight" | "visa";
   label: string;
   date: Date;
-  amount: number; // ALWAYS PKR — converted for hotel lines, native for everything else
-  // Present only for bookingType === "hotel" — the original SAR figure and
-  // the exchange rate used to convert it, so the ledger can show the math.
+  amount: number; // ALWAYS PKR — converted for hotel lines, native otherwise
+  // Hotel lines only — the original SAR figure and the rate used.
   originalCurrency?: string;
   originalAmount?: number;
   exchangeRate?: number;
@@ -30,7 +27,7 @@ export type VendorPurchaseLine = {
 export type VendorPaymentLine = {
   type: "payment";
   date: Date;
-  amount: number; // PKR — what we paid the vendor
+  amount: number; // PKR
   note: string | null;
 };
 
@@ -61,8 +58,6 @@ async function getVendorPurchaseLines(agencyId: string, vendorId: string): Promi
 
   const lines: VendorPurchaseLine[] = [];
 
-  // Hotel — entered in SAR, converted to PKR using this specific booking's
-  // own exchangeRate (not a live/current rate).
   hotelEntries.forEach((e) => {
     const t = calculateHotelEntryTotals(e);
     const rate = e.hotelBooking?.exchangeRate ?? e.packageBooking?.exchangeRate ?? 1;
@@ -79,7 +74,6 @@ async function getVendorPurchaseLines(agencyId: string, vendorId: string): Promi
     });
   });
 
-  // Transport/Flight/Visa — already entered in PKR, no conversion needed.
   transportSegments.forEach((s) => {
     lines.push({
       type: "purchase",
@@ -117,16 +111,13 @@ export async function sumVendorPayments(vendorId: string): Promise<number> {
   return result._sum.amount || 0;
 }
 
-// totalBuying is always PKR here — purchase lines are pre-converted above.
+// totalBuying is always PKR — purchase lines are pre-converted above.
 export async function getVendorTotalOwed(agencyId: string, vendorId: string) {
   const lines = await getVendorPurchaseLines(agencyId, vendorId);
   const totalBuying = lines.reduce((s, l) => s + l.amount, 0);
   return { totalBuying, lines };
 }
 
-// Full chronological ledger — purchases and payments interleaved by date,
-// every amount in PKR. Hotel purchase lines carry their SAR/rate alongside
-// the converted PKR amount so the printable Ledger can show all three.
 export async function getVendorLedger(agencyId: string, vendorId: string) {
   const purchaseLines = await getVendorPurchaseLines(agencyId, vendorId);
   const payments = await prisma.vendorPayment.findMany({ where: { vendorId }, orderBy: { paidOn: "asc" } });

@@ -19,7 +19,12 @@ export async function GET(request: Request, { params }: RouteParams) {
 
     const booking = await prisma.packageBooking.findUnique({
       where: { id },
-      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
+      include: {
+        hotels: { include: { vendor: true } },
+        transportSegments: { include: { vendor: true } },
+        flightSegments: { include: { vendor: true } },
+        visaEntries: { include: { vendor: true } },
+      },
     });
 
     if (!booking || booking.agencyId !== session.user.agencyId) {
@@ -85,16 +90,19 @@ export async function PUT(request: Request, { params }: RouteParams) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
-        vendorName: body.vendorName || null,
-        // paymentStatus deliberately NOT from the body — recomputed below.
+        showBreakdown: !!body.showBreakdown,
+        // paymentStatus and voucherNumber deliberately NOT from the body —
+        // status is recomputed below, voucherNumber is set once at creation.
         ...buildSectionCreates(body),
       },
-      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
+      include: {
+        hotels: { include: { vendor: true } },
+        transportSegments: { include: { vendor: true } },
+        flightSegments: { include: { vendor: true } },
+        visaEntries: { include: { vendor: true } },
+      },
     });
 
-    // Editing sections/discount/VAT/exchangeRate changes Net Total, which
-    // changes what the same payments add up to. Re-derive or the badge goes
-    // stale until the next payment is recorded.
     try {
       const netTotal = await getBookingNetTotal("package", id);
       const payments = await prisma.payment.findMany({ where: { bookingType: "package", bookingId: id } });
@@ -123,8 +131,6 @@ export async function DELETE(request: Request, { params }: RouteParams) {
       return NextResponse.json({ error: "Not found" }, { status: 404 });
     }
 
-    // Entry rows cascade via their FKs; payments don't (loose pair), so
-    // clear those explicitly or they become orphans that still count.
     await prisma.payment.deleteMany({ where: { bookingType: "package", bookingId: id } });
     await prisma.packageBooking.delete({ where: { id } });
 

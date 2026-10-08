@@ -13,6 +13,7 @@ import {
   calculateFooterTotals,
 } from "@/src/lib/pricingCalculations";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
+import Spinner from "@/src/components/ui/Spinner";
 
 type Booking = {
   id: string;
@@ -21,6 +22,7 @@ type Booking = {
   nationality: string;
   mobileNo: string;
   referenceNo: string | null;
+  voucherNumber: string | null;
   currency: string;
   exchangeRate: number;
   discount: number;
@@ -28,7 +30,6 @@ type Booking = {
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  vendorName: string | null;
   includeHotels: boolean;
   includeTransports: boolean;
   includeFlights: boolean;
@@ -96,13 +97,11 @@ export default function ViewPackageBookingPage() {
     load();
   }, [id]);
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
   if (error || !booking) return <p className="p-6 text-red-600">{error || "Booking not found."}</p>;
 
   const rate = booking.exchangeRate || 1;
 
-  // Hotel lines convert from SAR inside this helper; everything else is
-  // already in the package's currency. One total, one currency.
   const lines = calculatePackageLineItems(
     {
       hotels: booking.includeHotels ? booking.hotels : [],
@@ -146,29 +145,25 @@ export default function ViewPackageBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-  {/* Generate Invoice Link */}
-  <a
-    href={`/api/travelers/${booking.id}/pdf?type=invoice`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-    style={{ backgroundColor: "var(--agency-color)" }}
-  >
-    Generate Invoice
-  </a>
-
-  {/* Generate Voucher Link */}
-  <a
-    href={`/api/travelers/${booking.id}/pdf?type=voucher`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
-    style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-  >
-    Generate Voucher
-  </a>
-</div>
-
+          <a
+            href={`/api/travelers/${booking.id}/pdf?type=invoice`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--agency-color)" }}
+          >
+            Generate Invoice
+          </a>
+          <a
+            href={`/api/travelers/${booking.id}/pdf?type=voucher`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
+            style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
+          >
+            Generate Voucher
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -177,7 +172,7 @@ export default function ViewPackageBookingPage() {
             Booking Information
           </h2>
           <DetailRow label="Agent" value={booking.agentName} />
-          <DetailRow label="Vendor" value={booking.vendorName} />
+          <DetailRow label="Voucher No." value={booking.voucherNumber} />
           <DetailRow label="Reference No." value={booking.referenceNo} />
           <DetailRow label="Currency" value={booking.currency} />
           <DetailRow label="Exchange Rate" value={`1 SAR = ${rate} ${booking.currency}`} />
@@ -204,6 +199,7 @@ export default function ViewPackageBookingPage() {
                   Hotel {i + 1} — {h.hotelName}, {h.city}
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                  <span>Vendor: {h.vendor?.name || "—"}</span>
                   <span>Room: {h.roomType}</span>
                   <span>Meal: {h.mealPlan || "—"}</span>
                   <span>Check-in: {h.checkIn ? h.checkIn.slice(0, 10) : "—"}</span>
@@ -212,7 +208,6 @@ export default function ViewPackageBookingPage() {
                   <span>Rooms: {h.rooms}</span>
                   <span>Guests: {h.adults}A {h.children}C {h.infants}I</span>
                   <span>Conf. No: {h.confirmationNo || "—"}</span>
-                  {/* Entered in SAR — both shown so staff can check the rate */}
                   <span>Sell (SAR): {t.sellingTotal.toFixed(2)}</span>
                   <span className="font-semibold text-[#121212]">
                     Sell ({booking.currency}): {(t.sellingTotal * rate).toFixed(2)}
@@ -232,6 +227,7 @@ export default function ViewPackageBookingPage() {
                 Transfer {i + 1} — {s.sector}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                <span>Vendor: {s.vendor?.name || "—"}</span>
                 <span>Vehicle: {s.vehicle}</span>
                 <span>Date: {s.pickupDate ? s.pickupDate.slice(0, 10) : "—"}</span>
                 <span>Time: {s.pickupTime || "—"}</span>
@@ -256,6 +252,7 @@ export default function ViewPackageBookingPage() {
                   Flight {i + 1} — {s.airline} {s.flightNo} ({s.departureAirport} → {s.arrivalAirport})
                 </p>
                 <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                  <span>Vendor: {s.vendor?.name || "—"}</span>
                   <span>PNR: {s.pnr || "—"}</span>
                   <span>Class: {s.travelClass || "—"}</span>
                   <span>Departs: {fmtDateTime(s.departureDateTime)}</span>
@@ -291,6 +288,7 @@ export default function ViewPackageBookingPage() {
                 {e.applicantName} — {e.visaCategory}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                <span>Vendor: {e.vendor?.name || "—"}</span>
                 <span>Passport: {e.passportNumber}</span>
                 <span>Company: {e.companyName || "—"}</span>
                 <span>Processing: {e.processingType || "—"}</span>
@@ -316,8 +314,6 @@ export default function ViewPackageBookingPage() {
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
 
-      {/* Read-only here by design — payments are only editable from
-          Edit/Manage, never from View. */}
       <PaymentHistorySection
         bookingType="package"
         bookingId={booking.id}

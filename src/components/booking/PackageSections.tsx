@@ -2,6 +2,13 @@
 //
 // The four section row-editors for the package wizard, in one place so the
 // Add and Edit pages don't duplicate ~400 lines of identical inputs.
+//
+// Each row type now carries its own vendorId (hotel/transport/visa — flight
+// already has this via FlightSegmentFields) and the hotel pricing fields
+// match the current HotelBookingEntry shape: a flat buyingRatePerNight /
+// sellingRatePerNight pair, not the old per-adult/child fields. Transport's
+// vehicle field is free text with a suggestions datalist, same as the
+// standalone Transport booking form.
 
 "use client";
 
@@ -9,6 +16,7 @@ import { HotelRow, ROOM_TYPES, MEAL_PLANS } from "@/src/lib/hotelBookingTypes";
 import { TransportRow, VEHICLE_SUGGESTIONS } from "@/src/lib/transportBookingTypes";
 import { VisaRow, PROCESSING_TYPES } from "@/src/lib/visaBookingTypes";
 import { calculateHotelEntryTotals } from "@/src/lib/pricingCalculations";
+import VendorSelect from "@/src/components/booking/VendorSelect";
 
 const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
@@ -57,6 +65,11 @@ export function HotelRowFields({
 
   return (
     <RowShell title={`Hotel ${index + 1}`} onRemove={onRemove}>
+      <div className="mb-3">
+        <label className={labelClass}>Vendor (who we bought this hotel from)</label>
+        <VendorSelect value={row.vendorId} onChange={(v) => onChange("vendorId", v)} />
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Hotel Name</label>
@@ -92,7 +105,7 @@ export function HotelRowFields({
             onChange={(e) => onChange("checkOut", e.target.value)} required />
         </div>
         <div>
-          <label className={labelClass}>Confirmation No.</label>
+          <label className={labelClass}>Confirmation Number</label>
           <input type="text" className={inputClass} value={row.confirmationNo}
             onChange={(e) => onChange("confirmationNo", e.target.value)} />
         </div>
@@ -121,34 +134,25 @@ export function HotelRowFields({
         </div>
       </div>
 
-      {/* Adults/children describe ONE room's occupancy — the rooms count
-          multiplies in on top. Rates are in SAR, converted below. */}
+      {/* Simple room x night pricing — same formula and same two fields as
+          the standalone Hotel booking form. Adults/children above are
+          headcount only now, kept for record-keeping, no pricing effect. */}
       <div className="mt-4 rounded-lg border border-gray-100 bg-white p-3">
         <p className="text-[11px] font-semibold uppercase tracking-wide text-gray-400 mb-2">
-          Price per Person / Night (SAR)
+          Pricing (SAR, per room per night)
         </p>
-        {/* <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
           <div>
-            <label className={labelClass}>Adult Buying</label>
-            <input type="number" step="0.01" className={inputClass} value={row.adultBuyingPricePerNight}
-              onChange={(e) => onChange("adultBuyingPricePerNight", parseFloat(e.target.value) || 0)} />
+            <label className={labelClass}>Buying Rate</label>
+            <input type="number" step="0.01" className={inputClass} value={row.buyingRatePerNight}
+              onChange={(e) => onChange("buyingRatePerNight", parseFloat(e.target.value) || 0)} required />
           </div>
           <div>
-            <label className={labelClass}>Adult Selling</label>
-            <input type="number" step="0.01" className={inputClass} value={row.adultSellingPricePerNight}
-              onChange={(e) => onChange("adultSellingPricePerNight", parseFloat(e.target.value) || 0)} />
+            <label className={labelClass}>Selling Rate</label>
+            <input type="number" step="0.01" className={inputClass} value={row.sellingRatePerNight}
+              onChange={(e) => onChange("sellingRatePerNight", parseFloat(e.target.value) || 0)} required />
           </div>
-          <div>
-            <label className={labelClass}>Child Buying</label>
-            <input type="number" step="0.01" className={inputClass} value={row.childBuyingPricePerNight}
-              onChange={(e) => onChange("childBuyingPricePerNight", parseFloat(e.target.value) || 0)} />
-          </div>
-          <div>
-            <label className={labelClass}>Child Selling</label>
-            <input type="number" step="0.01" className={inputClass} value={row.childSellingPricePerNight}
-              onChange={(e) => onChange("childSellingPricePerNight", parseFloat(e.target.value) || 0)} />
-          </div>
-        </div> */}
+        </div>
         <div className="mt-3 flex flex-wrap gap-4 text-xs">
           <span className="text-gray-500">Nights: <span className="font-bold text-[#121212]">{totals.nights}</span></span>
           <span className="text-gray-500">
@@ -178,14 +182,30 @@ export function TransportRowFields({
   onChange: (field: keyof TransportRow, value: any) => void;
   onRemove: () => void;
 }) {
+  const datalistId = `vehicle-suggestions-pkg-${row.id}`;
+
   return (
     <RowShell title={`Transfer ${index + 1}`} onRemove={onRemove}>
+      <div className="mb-3">
+        <label className={labelClass}>Vendor (who we booked this transport from)</label>
+        <VendorSelect value={row.vendorId} onChange={(v) => onChange("vendorId", v)} />
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Vehicle</label>
-          <select className={inputClass} value={row.vehicle} onChange={(e) => onChange("vehicle", e.target.value)}>
-            {VEHICLE_SUGGESTIONS.map((v) => <option key={v} value={v}>{v}</option>)}
-          </select>
+          <input
+            list={datalistId}
+            type="text"
+            className={inputClass}
+            placeholder="e.g. Hiace, Camry, Coaster"
+            value={row.vehicle}
+            onChange={(e) => onChange("vehicle", e.target.value)}
+            required
+          />
+          <datalist id={datalistId}>
+            {VEHICLE_SUGGESTIONS.map((v) => <option key={v} value={v} />)}
+          </datalist>
         </div>
         <div>
           <label className={labelClass}>Sector</label>
@@ -242,6 +262,11 @@ export function VisaRowFields({
 }) {
   return (
     <RowShell title={`Applicant ${index + 1}`} onRemove={onRemove}>
+      <div className="mb-3">
+        <label className={labelClass}>Vendor (who we bought this visa from)</label>
+        <VendorSelect value={row.vendorId} onChange={(v) => onChange("vendorId", v)} />
+      </div>
+
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
         <div>
           <label className={labelClass}>Visa Category</label>

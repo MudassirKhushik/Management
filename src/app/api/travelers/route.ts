@@ -2,11 +2,14 @@
 //
 // PackageBooking = the combined wizard. Section toggles decide which entry
 // types get rows; every entry model is shared with its standalone booking
-// via nullable dual FKs.
+// via nullable dual FKs. Vendor now lives per entry row (hotel/transport/
+// flight/visa each carry their own vendorId) instead of one field on the
+// whole booking — matching every other booking type.
 
 import { NextResponse } from "next/server";
 import { prisma } from "@/src/lib/prisma";
 import { auth } from "../../../../auth";
+import { getNextSequenceNumber } from "@/src/lib/sequenceHelpers";
 
 export async function GET() {
   try {
@@ -17,7 +20,12 @@ export async function GET() {
 
     const bookings = await prisma.packageBooking.findMany({
       where: { agencyId: session.user.agencyId },
-      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
+      include: {
+        hotels: { include: { vendor: true } },
+        transportSegments: { include: { vendor: true } },
+        flightSegments: { include: { vendor: true } },
+        visaEntries: { include: { vendor: true } },
+      },
       orderBy: { createdAt: "desc" },
     });
 
@@ -41,12 +49,13 @@ export async function GET() {
 
 // Shared by POST and PUT — the nested-create payload for all four sections.
 // Sections that are toggled off create nothing, so unchecking a box and
-// saving genuinely removes those rows.
+// saving genuinely removes those rows. Each row carries its own vendorId.
 export function buildSectionCreates(body: any) {
   return {
     hotels: {
       create: body.includeHotels
         ? (body.hotels || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             hotelName: row.hotelName,
             city: row.city,
             roomType: row.roomType,
@@ -58,16 +67,15 @@ export function buildSectionCreates(body: any) {
             infants: parseInt(row.infants) || 0,
             mealPlan: row.mealPlan || null,
             confirmationNo: row.confirmationNo || null,
-            adultBuyingPricePerNight: parseFloat(row.adultBuyingPricePerNight) || 0,
-            adultSellingPricePerNight: parseFloat(row.adultSellingPricePerNight) || 0,
-            childBuyingPricePerNight: parseFloat(row.childBuyingPricePerNight) || 0,
-            childSellingPricePerNight: parseFloat(row.childSellingPricePerNight) || 0,
+            buyingRatePerNight: parseFloat(row.buyingRatePerNight) || 0,
+            sellingRatePerNight: parseFloat(row.sellingRatePerNight) || 0,
           }))
         : [],
     },
     transportSegments: {
       create: body.includeTransports
         ? (body.transportSegments || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             vehicle: row.vehicle,
             sector: row.sector,
             pickupDate: new Date(row.pickupDate),
@@ -82,6 +90,7 @@ export function buildSectionCreates(body: any) {
     flightSegments: {
       create: body.includeFlights
         ? (body.flightSegments || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             airline: row.airline,
             flightNo: row.flightNo,
             pnr: row.pnr || null,
@@ -109,6 +118,7 @@ export function buildSectionCreates(body: any) {
     visaEntries: {
       create: body.includeVisas
         ? (body.visaEntries || []).map((row: any) => ({
+            vendorId: row.vendorId || null,
             visaCategory: row.visaCategory,
             applicantName: row.applicantName,
             passportNumber: row.passportNumber,
@@ -133,8 +143,6 @@ export async function POST(request: Request) {
 
     const body = await request.json();
 
-    // Hotel rows are entered in SAR, so a package containing hotels needs a
-    // real rate or their contribution to the PKR total will be wrong.
     if (body.includeHotels && (!body.exchangeRate || parseFloat(body.exchangeRate) <= 0)) {
       return NextResponse.json(
         { error: "Exchange rate is required when the package includes hotels." },
@@ -142,9 +150,12 @@ export async function POST(request: Request) {
       );
     }
 
+    const voucherNumber = await getNextSequenceNumber(session.user.agencyId, "package");
+
     const booking = await prisma.packageBooking.create({
       data: {
         agencyId: session.user.agencyId,
+        voucherNumber,
         agentName: body.agentName,
         guestName: body.guestName,
         nationality: body.nationality,
@@ -160,11 +171,16 @@ export async function POST(request: Request) {
         vatPercent: parseFloat(body.vatPercent) || 0,
         paymentType: body.paymentType || null,
         note: body.note || null,
-        vendorName: body.vendorName || null,
+        showBreakdown: !!body.showBreakdown,
         paymentStatus: "Pending",
         ...buildSectionCreates(body),
       },
-      include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
+      include: {
+        hotels: { include: { vendor: true } },
+        transportSegments: { include: { vendor: true } },
+        flightSegments: { include: { vendor: true } },
+        visaEntries: { include: { vendor: true } },
+      },
     });
 
     return NextResponse.json(booking, { status: 201 });

@@ -11,13 +11,13 @@ import {
   remainingBalanceTier,
 } from "@/src/lib/pricingCalculations";
 import QuickPaymentForm, { QuickPaymentPayload } from "@/src/components/booking/QuickPaymentForm";
+import Spinner from "@/src/components/ui/Spinner";
 
 type PackageBookingFull = {
   id: string;
   guestName: string;
   mobileNo: string;
   agentName: string;
-  vendorName: string | null;
   paymentStatus: string | null;
   currency: string;
   discount: number;
@@ -54,54 +54,22 @@ const TIER_FONT: Record<string, string> = {
 };
 
 function EyeIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function EditIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 20h9" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" strokeLinecap="round" strokeLinejoin="round" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function TrashIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function CashIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="2" y="6" width="20" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function FileTextIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="16" y1="13" x2="8" y2="13" strokeLinecap="round" />
-      <line x1="16" y1="17" x2="8" y2="17" strokeLinecap="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round" /><polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" /><line x1="16" y1="13" x2="8" y2="13" strokeLinecap="round" /><line x1="16" y1="17" x2="8" y2="17" strokeLinecap="round" /></svg>;
 }
 function TicketIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="9" y1="5" x2="9" y2="19" strokeDasharray="2 3" strokeLinecap="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" strokeLinecap="round" strokeLinejoin="round" /><line x1="9" y1="5" x2="9" y2="19" strokeDasharray="2 3" strokeLinecap="round" /></svg>;
 }
 
 function IconButton({
@@ -127,6 +95,18 @@ function IconButton({
     </span>
   );
   return href ? <Link href={href}>{inner}</Link> : <button type="button" onClick={onClick}>{inner}</button>;
+}
+
+// Package has four section types, each with its own per-entry vendor, so
+// there's no single "Vendor" field anymore — this lists the distinct
+// vendor names actually used across every included section.
+function vendorsUsed(b: PackageBookingFull): string {
+  const names = new Set<string>();
+  if (b.includeHotels) b.hotels.forEach((h) => h.vendor?.name && names.add(h.vendor.name));
+  if (b.includeTransports) b.transportSegments.forEach((s) => s.vendor?.name && names.add(s.vendor.name));
+  if (b.includeFlights) b.flightSegments.forEach((s) => s.vendor?.name && names.add(s.vendor.name));
+  if (b.includeVisas) b.visaEntries.forEach((e) => e.vendor?.name && names.add(e.vendor.name));
+  return names.size ? Array.from(names).join(", ") : "—";
 }
 
 export default function ManagePackageBookingsPage() {
@@ -190,7 +170,7 @@ export default function ManagePackageBookingsPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading bookings..." />;
   if (error) return <p className="p-6 text-red-600">{error}</p>;
 
   const filtered = bookings.filter((b) => {
@@ -200,12 +180,10 @@ export default function ManagePackageBookingsPage() {
       b.guestName.toLowerCase().includes(q) ||
       (b.mobileNo || "").toLowerCase().includes(q) ||
       b.agentName.toLowerCase().includes(q) ||
-      (b.vendorName || "").toLowerCase().includes(q)
+      vendorsUsed(b).toLowerCase().includes(q)
     );
   });
 
-  // Guest, Phone, Includes, Net Total, Profit, Remaining, Vendor, Agent,
-  // Payment, Actions = 10.
   const fullColSpan = 10;
 
   return (
@@ -241,7 +219,7 @@ export default function ManagePackageBookingsPage() {
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Net Total (PKR)</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Profit (PKR)</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Remaining (PKR)</th>
-              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendor</th>
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendors</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Agent</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Payment</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Actions</th>
@@ -249,9 +227,6 @@ export default function ManagePackageBookingsPage() {
           </thead>
           <tbody>
             {filtered.map((booking) => {
-              // Hotel lines convert from SAR at this booking's rate; every
-              // other section is already PKR. One PKR total, so unlike the
-              // Hotel page there's no second conversion step here.
               const lines = calculatePackageLineItems(booking, booking.exchangeRate);
               const { grossBuying, grossSelling } = sumLineItems(lines);
               const totals = calculateFooterTotals({
@@ -265,92 +240,86 @@ export default function ManagePackageBookingsPage() {
               const isPaymentRowOpen = paymentRowId === booking.id;
 
               const includes = [
-                booking.includeHotels ? `🏨 ${booking.hotels.length}` : null,
-                booking.includeTransports ? `🚖 ${booking.transportSegments.length}` : null,
-                booking.includeFlights ? `✈️ ${booking.flightSegments.length}` : null,
-                booking.includeVisas ? `🪪 ${booking.visaEntries.length}` : null,
+                booking.includeHotels ? `Hotels ${booking.hotels.length}` : null,
+                booking.includeTransports ? `Transport ${booking.transportSegments.length}` : null,
+                booking.includeFlights ? `Flights ${booking.flightSegments.length}` : null,
+                booking.includeVisas ? `Visas ${booking.visaEntries.length}` : null,
               ].filter(Boolean);
 
               return (
-  <Fragment key={booking.id}>
-    <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
-      <td className="px-4 py-3 font-medium text-[#121212]">{booking.guestName}</td>
-      <td className="px-4 py-3 text-gray-600">{booking.mobileNo || "—"}</td>
-      <td className="px-4 py-3 text-gray-600">{includes.length ? includes.join("  ") : "—"}</td>
-      <td className="px-4 py-3 font-semibold text-[#121212]">{totals.netTotal.toFixed(2)}</td>
-      <td className="px-4 py-3 text-emerald-600 font-medium">{totals.profit.toFixed(2)}</td>
-      <td className="px-4 py-3">
-        <button
-          type="button"
-          onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
-          className={`rounded-full border px-2.5 py-1 ${TIER_CLASS[tier]} ${TIER_FONT[tier]}`}
-          title="Click to record a payment"
-        >
-          {tier === "paid" ? "Paid" : remaining.toFixed(2)}
-        </button>
-      </td>
-      <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
-      <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
-      <td className="px-4 py-3">
-        <span
-          className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${
-            STATUS_COLOR[booking.paymentStatus || "Pending"]
-          }`}
-        >
-          {booking.paymentStatus || "Pending"}
-        </span>
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-1">
-          <IconButton
-            onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
-            title="Record Payment"
-          >
-            <CashIcon />
-          </IconButton>
-          <IconButton href={`/portal/travelers/${booking.id}/view`} title="View">
-            <EyeIcon />
-          </IconButton>
-          <IconButton href={`/portal/travelers/${booking.id}/edit`} title="Edit">
-            <EditIcon />
-          </IconButton>
-          
-          {/* Invoice Button with window.open */}
-          <IconButton 
-            onClick={() => window.open(`/api/travelers/${booking.id}/pdf?type=invoice`, '_blank', 'noopener,noreferrer')}
-            title="Generate Invoice"
-          >
-            <FileTextIcon />
-          </IconButton>
-
-          {/* Voucher Button with window.open */}
-          <IconButton
-            onClick={() => window.open(`/api/travelers/${booking.id}/pdf?type=voucher`, '_blank', 'noopener,noreferrer')}
-            title="Generate Voucher"
-          >
-            <TicketIcon />
-          </IconButton>
-
-          <IconButton onClick={() => handleDelete(booking.id)} title="Delete">
-            <TrashIcon />
-          </IconButton>
-        </div>
-      </td>
-    </tr>
-    {isPaymentRowOpen && (
-      <tr className="border-b border-gray-100 bg-gray-50/40">
-        <td colSpan={fullColSpan} className="px-4 py-4">
-          <QuickPaymentForm
-            compact
-            saving={paymentSaving}
-            onSubmit={(payload) => handleQuickPayment(booking.id, payload)}
-          />
-        </td>
-      </tr>
-    )}
-  </Fragment>
-);
-
+                <Fragment key={booking.id}>
+                  <tr className="border-b border-gray-50 hover:bg-gray-50/50 transition-colors">
+                    <td className="px-4 py-3 font-medium text-[#121212]">{booking.guestName}</td>
+                    <td className="px-4 py-3 text-gray-600">{booking.mobileNo || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{includes.length ? includes.join(" · ") : "—"}</td>
+                    <td className="px-4 py-3 font-semibold text-[#121212]">{totals.netTotal.toFixed(2)}</td>
+                    <td className="px-4 py-3 text-emerald-600 font-medium">{totals.profit.toFixed(2)}</td>
+                    <td className="px-4 py-3">
+                      <button
+                        type="button"
+                        onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
+                        className={`rounded-full border px-2.5 py-1 ${TIER_CLASS[tier]} ${TIER_FONT[tier]}`}
+                        title="Click to record a payment"
+                      >
+                        {tier === "paid" ? "Paid" : remaining.toFixed(2)}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600">{vendorsUsed(booking)}</td>
+                    <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
+                    <td className="px-4 py-3">
+                      <span
+                        className={`text-xs font-semibold rounded-full border px-2.5 py-1 ${
+                          STATUS_COLOR[booking.paymentStatus || "Pending"]
+                        }`}
+                      >
+                        {booking.paymentStatus || "Pending"}
+                      </span>
+                    </td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-1">
+                        <IconButton
+                          onClick={() => setPaymentRowId(isPaymentRowOpen ? null : booking.id)}
+                          title="Record Payment"
+                        >
+                          <CashIcon />
+                        </IconButton>
+                        <IconButton href={`/portal/travelers/${booking.id}/view`} title="View">
+                          <EyeIcon />
+                        </IconButton>
+                        <IconButton href={`/portal/travelers/${booking.id}/edit`} title="Edit">
+                          <EditIcon />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => window.open(`/api/travelers/${booking.id}/pdf?type=invoice`, "_blank", "noopener,noreferrer")}
+                          title="Generate Invoice"
+                        >
+                          <FileTextIcon />
+                        </IconButton>
+                        <IconButton
+                          onClick={() => window.open(`/api/travelers/${booking.id}/pdf?type=voucher`, "_blank", "noopener,noreferrer")}
+                          title="Generate Voucher"
+                        >
+                          <TicketIcon />
+                        </IconButton>
+                        <IconButton onClick={() => handleDelete(booking.id)} title="Delete">
+                          <TrashIcon />
+                        </IconButton>
+                      </div>
+                    </td>
+                  </tr>
+                  {isPaymentRowOpen && (
+                    <tr className="border-b border-gray-100 bg-gray-50/40">
+                      <td colSpan={fullColSpan} className="px-4 py-4">
+                        <QuickPaymentForm
+                          compact
+                          saving={paymentSaving}
+                          onSubmit={(payload) => handleQuickPayment(booking.id, payload)}
+                        />
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
             })}
             {filtered.length === 0 && (
               <tr>

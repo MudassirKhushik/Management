@@ -36,8 +36,6 @@ export default function VendorViewPage() {
   if (loading) return <Spinner label="Loading vendor..." />;
   if (!vendor) return <p className="p-6 text-red-600">Vendor not found.</p>;
 
-  let running = 0;
-
   return (
     <div className="max-w-4xl mx-auto p-4 md:p-6">
       <div className="flex flex-wrap items-center justify-between gap-3 mb-6">
@@ -84,7 +82,6 @@ export default function VendorViewPage() {
         </div>
         <div className="space-y-1">
           {vendor.ledger.map((e, i) => {
-            if (e.type === "purchase") running += e.amount; else running -= e.amount;
             const isHotel = e.type === "purchase" && e.bookingType === "hotel";
             return (
               <div key={i} className="flex flex-col sm:flex-row sm:justify-between text-sm py-1.5 border-b border-gray-50 last:border-0 gap-0.5">
@@ -106,9 +103,7 @@ export default function VendorViewPage() {
         </div>
       </div>
 
-      <div className="mt-5">
-        <VendorPaymentHistorySection vendorId={id} readOnly />
-      </div>
+      <VendorPaymentHistorySection vendorId={id} readOnly />
     </div>
   );
 }

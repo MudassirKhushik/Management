@@ -11,7 +11,11 @@ import QRCode from "qrcode";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-function resolveBaseUrl(reqUrl: string): string {
+function resolveBaseUrl(reqUrl: string, agency: { customDomain?: string | null }): string {
+  if (agency.customDomain) {
+    const domain = agency.customDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return `https://${domain}`;
+  }
   if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
   return new URL(reqUrl).origin;
 }
@@ -28,7 +32,12 @@ export async function GET(req: Request, { params }: RouteParams) {
 
   const booking = await prisma.packageBooking.findUnique({
     where: { id },
-    include: { hotels: true, transportSegments: true, flightSegments: true, visaEntries: true },
+    include: {
+      hotels: { include: { vendor: true } },
+      transportSegments: { include: { vendor: true } },
+      flightSegments: { include: { vendor: true } },
+      visaEntries: { include: { vendor: true } },
+    },
   });
 
   if (!booking || booking.agencyId !== session.user.agencyId) {
@@ -49,13 +58,11 @@ export async function GET(req: Request, { params }: RouteParams) {
     orderBy: { paidOn: "asc" },
   });
 
-  // Voucher-only. The QR points at the agency verification page, not at
-  // booking data — same URL on every booking type's voucher.
   let verifyQrDataUri: string | null = null;
   if (variant === "voucher") {
     try {
-      const verifyUrl = `${resolveBaseUrl(req.url)}/verify/${agency.slug}`;
-      verifyQrDataUri = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 200 });
+      const verifyUrl = `${resolveBaseUrl(req.url, agency)}/verify/${agency.slug}`;
+      verifyQrDataUri = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 220 });
     } catch (err) {
       console.error("Failed to generate verification QR code:", err);
     }
@@ -68,13 +75,14 @@ export async function GET(req: Request, { params }: RouteParams) {
         agency,
         variant,
         verifyQrDataUri,
+        showBreakdown: booking.showBreakdown,
       }) as any
     );
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${variant}-${booking.referenceNo || booking.id.slice(0, 8)}.pdf"`,
+        "Content-Disposition": `inline; filename="${variant}-${booking.voucherNumber || id.slice(0, 8)}.pdf"`,
       },
     });
   } catch (err) {

@@ -7,6 +7,8 @@ import { useRouter, useParams } from "next/navigation";
 import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
 import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
+import VendorSelect from "@/src/components/booking/VendorSelect";
+import Spinner from "@/src/components/ui/Spinner";
 import {
   emptyGlobalHeader,
   emptyFooterData,
@@ -27,7 +29,7 @@ export default function EditVisaBookingPage() {
 
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
-  const [vendorName, setVendorName] = useState("");
+  const [showBreakdown, setShowBreakdown] = useState(false);
   const [entries, setEntries] = useState<VisaRow[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
@@ -54,10 +56,11 @@ export default function EditVisaBookingPage() {
           paymentType: data.paymentType || "",
           note: data.note || "",
         });
-        setVendorName(data.vendorName || "");
+        setShowBreakdown(!!data.showBreakdown);
         setEntries(
           data.entries.map((e: any) => ({
             id: e.id,
+            vendorId: e.vendorId || "",
             visaCategory: e.visaCategory,
             applicantName: e.applicantName,
             passportNumber: e.passportNumber,
@@ -107,7 +110,7 @@ export default function EditVisaBookingPage() {
       const res = await fetch(`/api/visa-bookings/${id}`, {
         method: "PUT",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ ...header, ...footer, vendorName, entries }),
+        body: JSON.stringify({ ...header, ...footer, showBreakdown, entries }),
       });
       if (!res.ok) {
         const errorData = await res.json().catch(() => ({}));
@@ -122,7 +125,7 @@ export default function EditVisaBookingPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
 
   return (
     <div className="max-w-full mx-auto p-4 md:p-6">
@@ -133,22 +136,6 @@ export default function EditVisaBookingPage() {
           value={header}
           onChange={(field, value) => setHeader((h) => ({ ...h, [field]: value }))}
         />
-
-        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
-          <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Vendor
-          </h2>
-          <div>
-            <label className={labelClass}>Vendor Name</label>
-            <input
-              type="text"
-              className={inputClass}
-              placeholder="Who you bought this visa from (supplier, not the sales agent)"
-              value={vendorName}
-              onChange={(e) => setVendorName(e.target.value)}
-            />
-          </div>
-        </section>
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
@@ -167,6 +154,11 @@ export default function EditVisaBookingPage() {
                   >
                     Remove
                   </button>
+                </div>
+
+                <div className="mb-3">
+                  <label className={labelClass}>Vendor (who we bought this visa from)</label>
+                  <VendorSelect value={row.vendorId} onChange={(v) => updateRow(row.id, "vendorId", v)} />
                 </div>
 
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
@@ -279,6 +271,27 @@ export default function EditVisaBookingPage() {
           </button>
         </section>
 
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--agency-color)" }}>
+                Show Breakdown on Invoice
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-1">
+                When off, the client's Invoice shows only the overall total. Turn on to also show each applicant's Sell Total.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showBreakdown ? "" : "bg-gray-200"}`}
+              style={showBreakdown ? { backgroundColor: "var(--agency-color)" } : undefined}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBreakdown ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </section>
+
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
@@ -300,8 +313,6 @@ export default function EditVisaBookingPage() {
         </button>
       </form>
 
-      {/* Outside the <form> on purpose — PaymentHistorySection has its own
-          form inside it, and nested forms are invalid HTML. */}
       <div className="mt-5">
         <PaymentHistorySection
           bookingType="visa"

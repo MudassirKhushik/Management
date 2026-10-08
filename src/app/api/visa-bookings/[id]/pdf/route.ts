@@ -11,10 +11,14 @@ import QRCode from "qrcode";
 
 type RouteParams = { params: Promise<{ id: string }> };
 
-// Same rule as the hotel PDF route: use the origin of the incoming request
-// so the QR link matches whatever domain actually served the PDF (Vercel URL
-// today, custom domain later). NEXT_PUBLIC_BASE_URL wins if explicitly set.
-function resolveBaseUrl(reqUrl: string): string {
+// Custom domain wins if the agency has one connected, since each agency can
+// now be on its own domain. Falls back to NEXT_PUBLIC_BASE_URL, then the
+// request's own origin — same precedence used by every other PDF route.
+function resolveBaseUrl(reqUrl: string, agency: { customDomain?: string | null }): string {
+  if (agency.customDomain) {
+    const domain = agency.customDomain.replace(/^https?:\/\//, "").replace(/\/$/, "");
+    return `https://${domain}`;
+  }
   if (process.env.NEXT_PUBLIC_BASE_URL) return process.env.NEXT_PUBLIC_BASE_URL;
   return new URL(reqUrl).origin;
 }
@@ -31,7 +35,7 @@ export async function GET(req: Request, { params }: RouteParams) {
 
   const booking = await prisma.visaBooking.findUnique({
     where: { id },
-    include: { entries: true },
+    include: { entries: { include: { vendor: true } } },
   });
 
   if (!booking || booking.agencyId !== session.user.agencyId) {
@@ -52,16 +56,13 @@ export async function GET(req: Request, { params }: RouteParams) {
     orderBy: { paidOn: "asc" },
   });
 
-  // Voucher-only — it's the document the client actually carries.
-  // The type prefix keeps hotel and visa IDs from colliding on /verify.
   let verifyQrDataUri: string | null = null;
   if (variant === "voucher") {
     try {
-        const verifyUrl = `${resolveBaseUrl(req.url)}/verify/${agency.slug}`;
-      verifyQrDataUri = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 200 });
+      const verifyUrl = `${resolveBaseUrl(req.url, agency)}/verify/${agency.slug}`;
+      verifyQrDataUri = await QRCode.toDataURL(verifyUrl, { margin: 1, width: 220 });
     } catch (err) {
       console.error("Failed to generate verification QR code:", err);
-      // Not fatal — the voucher still renders, just without the QR block.
     }
   }
 
@@ -72,13 +73,14 @@ export async function GET(req: Request, { params }: RouteParams) {
         agency,
         variant,
         verifyQrDataUri,
+        showBreakdown: booking.showBreakdown,
       }) as any
     );
 
     return new NextResponse(new Uint8Array(buffer), {
       headers: {
         "Content-Type": "application/pdf",
-        "Content-Disposition": `inline; filename="${variant}-${booking.referenceNo || booking.id.slice(0, 8)}.pdf"`,
+        "Content-Disposition": `inline; filename="${variant}-${booking.voucherNumber || id.slice(0, 8)}.pdf"`,
       },
     });
   } catch (err) {

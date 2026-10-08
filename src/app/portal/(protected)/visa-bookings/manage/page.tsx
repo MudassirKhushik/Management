@@ -6,12 +6,14 @@ import { useEffect, useState, Fragment } from "react";
 import Link from "next/link";
 import { sumLineItems, calculateFooterTotals, remainingBalanceTier } from "@/src/lib/pricingCalculations";
 import QuickPaymentForm, { QuickPaymentPayload } from "@/src/components/booking/QuickPaymentForm";
+import Spinner from "@/src/components/ui/Spinner";
 
 type EntryRow = {
   visaCategory: string;
   applicantName: string;
   buyingCost: number;
   sellingPrice: number;
+  vendor: { id: string; name: string } | null;
 };
 
 type VisaBookingWithEntries = {
@@ -19,7 +21,6 @@ type VisaBookingWithEntries = {
   guestName: string;
   mobileNo: string;
   agentName: string;
-  vendorName: string | null;
   paymentStatus: string | null;
   currency: string;
   discount: number;
@@ -29,7 +30,6 @@ type VisaBookingWithEntries = {
   totalPaid: number;
 };
 
-// No "Cancelled" — cancelling a booking means deleting it.
 const STATUS_COLOR: Record<string, string> = {
   Pending: "bg-amber-50 text-amber-700 border-amber-200",
   Paid: "bg-emerald-50 text-emerald-700 border-emerald-200",
@@ -49,87 +49,34 @@ const TIER_FONT: Record<string, string> = {
 };
 
 function EyeIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M1 12s4-7 11-7 11 7 11 7-4 7-11 7-11-7-11-7z" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function EditIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M12 20h9" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M12 20h9" strokeLinecap="round" strokeLinejoin="round" /><path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function TrashIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" />
-      <path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polyline points="3 6 5 6 21 6" strokeLinecap="round" strokeLinejoin="round" /><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 function FileTextIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round" />
-      <polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="16" y1="13" x2="8" y2="13" strokeLinecap="round" />
-      <line x1="16" y1="17" x2="8" y2="17" strokeLinecap="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z" strokeLinecap="round" strokeLinejoin="round" /><polyline points="14 2 14 8 20 8" strokeLinecap="round" strokeLinejoin="round" /><line x1="16" y1="13" x2="8" y2="13" strokeLinecap="round" /><line x1="16" y1="17" x2="8" y2="17" strokeLinecap="round" /></svg>;
 }
 function TicketIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" strokeLinecap="round" strokeLinejoin="round" />
-      <line x1="9" y1="5" x2="9" y2="19" strokeDasharray="2 3" strokeLinecap="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M2 9a3 3 0 0 1 0 6v2a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-2a3 3 0 0 1 0-6V7a2 2 0 0 0-2-2H4a2 2 0 0 0-2 2z" strokeLinecap="round" strokeLinejoin="round" /><line x1="9" y1="5" x2="9" y2="19" strokeDasharray="2 3" strokeLinecap="round" /></svg>;
 }
 function CashIcon() {
-  return (
-    <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-      <rect x="2" y="6" width="20" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" />
-      <circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" />
-    </svg>
-  );
+  return <svg width="17" height="17" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="2" y="6" width="20" height="12" rx="2" strokeLinecap="round" strokeLinejoin="round" /><circle cx="12" cy="12" r="3" strokeLinecap="round" strokeLinejoin="round" /></svg>;
 }
 
-function IconButton({
-  href,
-  onClick,
-  children,
-  title,
-  external = false,
-}: {
-  href?: string;
-  onClick?: () => void;
-  children: React.ReactNode;
-  title: string;
-  external?: boolean;
-}) {
+function IconButton({ href, onClick, children, title, external = false }: { href?: string; onClick?: () => void; children: React.ReactNode; title: string; external?: boolean }) {
   const cls = "w-8 h-8 flex items-center justify-center rounded-lg text-gray-400 transition-colors hover:text-white";
   const inner = (
-    <span
-      className={cls}
+    <span className={cls} title={title}
       onMouseEnter={(e) => (e.currentTarget.style.backgroundColor = "var(--agency-color)")}
-      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}
-      title={title}
-    >
+      onMouseLeave={(e) => (e.currentTarget.style.backgroundColor = "transparent")}>
       {children}
     </span>
   );
-  if (external && href) {
-    return (
-      <a href={href} target="_blank" rel="noopener noreferrer">
-        {inner}
-      </a>
-    );
-  }
+  if (external && href) return <a href={href} target="_blank" rel="noopener noreferrer">{inner}</a>;
   return href ? <Link href={href}>{inner}</Link> : <button type="button" onClick={onClick}>{inner}</button>;
 }
 
@@ -170,9 +117,6 @@ export default function ManageVisaBookingsPage() {
     }
   }
 
-  // No manual status control — Pending/Partially Paid/Paid are always
-  // derived from payments received. Cancelling means deleting.
-
   async function handleQuickPayment(bookingId: string, payload: QuickPaymentPayload) {
     setPaymentSaving(true);
     try {
@@ -197,7 +141,7 @@ export default function ManageVisaBookingsPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading bookings..." />;
   if (error) return <p className="p-6 text-red-600">{error}</p>;
 
   const filtered = bookings.filter((b) => {
@@ -207,7 +151,7 @@ export default function ManageVisaBookingsPage() {
       b.guestName.toLowerCase().includes(q) ||
       (b.mobileNo || "").toLowerCase().includes(q) ||
       b.agentName.toLowerCase().includes(q) ||
-      (b.vendorName || "").toLowerCase().includes(q) ||
+      b.entries.some((e) => (e.vendor?.name || "").toLowerCase().includes(q)) ||
       b.entries.some(
         (e) => e.applicantName.toLowerCase().includes(q) || e.visaCategory.toLowerCase().includes(q)
       )
@@ -215,8 +159,6 @@ export default function ManageVisaBookingsPage() {
   });
 
   const maxEntries = Math.max(1, ...bookings.map((b) => b.entries.length));
-  // Guest + Phone + {maxEntries} + Net Total, Profit, Remaining, Vendor,
-  // Agent, Payment, Actions = maxEntries + 9.
   const fullColSpan = maxEntries + 9;
 
   return (
@@ -258,7 +200,7 @@ export default function ManageVisaBookingsPage() {
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">
                 Remaining ({filtered[0]?.currency || "PKR"})
               </th>
-              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendor</th>
+              <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Vendors</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Agent</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Payment</th>
               <th className="px-4 py-3 font-semibold text-xs uppercase tracking-wide text-gray-500">Actions</th>
@@ -275,11 +217,10 @@ export default function ManageVisaBookingsPage() {
                 discount: booking.discount,
                 vatPercent: booking.vatPercent,
               });
-              // Visa is priced in the booking's own currency (PKR by
-              // default) — no exchangeRate conversion step like Hotel needs.
               const remaining = Math.max(0, totals.netTotal - (booking.totalPaid || 0));
               const tier = remainingBalanceTier(remaining, totals.netTotal);
               const isPaymentRowOpen = paymentRowId === booking.id;
+              const vendorSummary = booking.entries.map((e) => e.vendor?.name || "—").join(" + ");
 
               return (
                 <Fragment key={booking.id}>
@@ -305,7 +246,7 @@ export default function ManageVisaBookingsPage() {
                         {tier === "paid" ? "Paid" : remaining.toFixed(2)}
                       </button>
                     </td>
-                    <td className="px-4 py-3 text-gray-600">{booking.vendorName || "—"}</td>
+                    <td className="px-4 py-3 text-gray-600">{vendorSummary}</td>
                     <td className="px-4 py-3 text-gray-600">{booking.agentName}</td>
                     <td className="px-4 py-3">
                       <span

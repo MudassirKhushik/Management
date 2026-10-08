@@ -7,6 +7,7 @@ import { useParams, useRouter } from "next/navigation";
 import Link from "next/link";
 import { sumLineItems, calculateFooterTotals } from "@/src/lib/pricingCalculations";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
+import Spinner from "@/src/components/ui/Spinner";
 
 type EntryRow = {
   id: string;
@@ -19,6 +20,7 @@ type EntryRow = {
   expiryDate: string | null;
   buyingCost: number;
   sellingPrice: number;
+  vendor: { id: string; name: string } | null;
 };
 
 type Booking = {
@@ -28,13 +30,13 @@ type Booking = {
   nationality: string;
   mobileNo: string;
   referenceNo: string | null;
+  voucherNumber: string | null;
   currency: string;
   discount: number;
   vatPercent: number;
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  vendorName: string | null;
   createdAt: string;
   entries: EntryRow[];
 };
@@ -71,7 +73,7 @@ export default function ViewVisaBookingPage() {
     load();
   }, [id]);
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
   if (error || !booking) return <p className="p-6 text-red-600">{error || "Booking not found."}</p>;
 
   const { grossBuying, grossSelling } = sumLineItems(
@@ -110,29 +112,25 @@ export default function ViewVisaBookingPage() {
           Documents
         </h2>
         <div className="flex flex-wrap gap-3">
-  {/* Generate Invoice Link */}
-  <a
-    href={`/api/visa-bookings/${booking.id}/pdf?type=invoice`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
-    style={{ backgroundColor: "var(--agency-color)" }}
-  >
-    Generate Invoice
-  </a>
-
-  {/* Generate Voucher Link */}
-  <a
-    href={`/api/visa-bookings/${booking.id}/pdf?type=voucher`}
-    target="_blank"
-    rel="noopener noreferrer"
-    className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
-    style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
-  >
-    Generate Voucher
-  </a>
-</div>
-
+          <a
+            href={`/api/visa-bookings/${booking.id}/pdf?type=invoice`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold text-white transition-opacity hover:opacity-90"
+            style={{ backgroundColor: "var(--agency-color)" }}
+          >
+            Generate Invoice
+          </a>
+          <a
+            href={`/api/visa-bookings/${booking.id}/pdf?type=voucher`}
+            target="_blank"
+            rel="noopener noreferrer"
+            className="rounded-lg px-5 py-2.5 text-sm font-semibold border-2 transition-colors hover:bg-black/[0.02]"
+            style={{ borderColor: "var(--agency-color)", color: "var(--agency-color)" }}
+          >
+            Generate Voucher
+          </a>
+        </div>
       </div>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
@@ -141,7 +139,7 @@ export default function ViewVisaBookingPage() {
             Booking Information
           </h2>
           <DetailRow label="Agent" value={booking.agentName} />
-          <DetailRow label="Vendor" value={booking.vendorName} />
+          <DetailRow label="Voucher No." value={booking.voucherNumber} />
           <DetailRow label="Reference No." value={booking.referenceNo} />
           <DetailRow label="Currency" value={booking.currency} />
           <DetailRow label="Payment Type" value={booking.paymentType} />
@@ -168,6 +166,7 @@ export default function ViewVisaBookingPage() {
                 {e.applicantName} — {e.visaCategory}
               </p>
               <div className="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs text-gray-600">
+                <span>Vendor: {e.vendor?.name || "—"}</span>
                 <span>Passport: {e.passportNumber}</span>
                 <span>Company: {e.companyName || "—"}</span>
                 <span>Processing: {e.processingType || "—"}</span>
@@ -193,8 +192,6 @@ export default function ViewVisaBookingPage() {
         {booking.note && <DetailRow label="Note" value={booking.note} />}
       </div>
 
-      {/* Read-only here by design — payments are only editable from
-          Edit/Manage, never from View. */}
       <PaymentHistorySection
         bookingType="visa"
         bookingId={booking.id}

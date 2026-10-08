@@ -8,6 +8,7 @@ import GlobalHeaderFields from "@/src/components/booking/GlobalHeaderFields";
 import PricingFooterFields from "@/src/components/booking/PricingFooterFields";
 import PaymentHistorySection from "@/src/components/booking/PaymentHistorySection";
 import FlightSegmentFields from "@/src/components/booking/FlightSegmentFields";
+import Spinner from "@/src/components/ui/Spinner";
 import {
   HotelRowFields,
   TransportRowFields,
@@ -30,8 +31,6 @@ const inputClass =
   "w-full rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none transition-colors";
 const labelClass = "block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-1.5";
 
-// <input type="datetime-local"> needs "YYYY-MM-DDTHH:mm" — an ISO string
-// from the API has seconds and a timezone the input silently rejects.
 function toLocalInput(iso: string | null) {
   if (!iso) return "";
   const d = new Date(iso);
@@ -47,8 +46,8 @@ export default function EditPackageBookingPage() {
 
   const [header, setHeader] = useState<GlobalHeaderData>(emptyGlobalHeader);
   const [footer, setFooter] = useState<FooterData>(emptyFooterData);
-  const [vendorName, setVendorName] = useState("");
   const [exchangeRate, setExchangeRate] = useState("");
+  const [showBreakdown, setShowBreakdown] = useState(false);
 
   const [includeHotels, setIncludeHotels] = useState(false);
   const [includeTransports, setIncludeTransports] = useState(false);
@@ -85,19 +84,18 @@ export default function EditPackageBookingPage() {
           paymentType: data.paymentType || "",
           note: data.note || "",
         });
-        setVendorName(data.vendorName || "");
         setExchangeRate(String(data.exchangeRate || ""));
+        setShowBreakdown(!!data.showBreakdown);
         setIncludeHotels(data.includeHotels);
         setIncludeTransports(data.includeTransports);
         setIncludeFlights(data.includeFlights);
         setIncludeVisas(data.includeVisas);
 
-        // A toggled-off section has no saved rows — seed it with one blank
-        // row so switching it on later doesn't show an empty section.
         if (data.hotels?.length) {
           setHotels(
             data.hotels.map((h: any) => ({
               id: h.id,
+              vendorId: h.vendorId || "",
               hotelName: h.hotelName,
               city: h.city,
               roomType: h.roomType,
@@ -109,10 +107,8 @@ export default function EditPackageBookingPage() {
               infants: h.infants,
               mealPlan: h.mealPlan || "",
               confirmationNo: h.confirmationNo || "",
-              adultBuyingPricePerNight: h.adultBuyingPricePerNight,
-              adultSellingPricePerNight: h.adultSellingPricePerNight,
-              childBuyingPricePerNight: h.childBuyingPricePerNight,
-              childSellingPricePerNight: h.childSellingPricePerNight,
+              buyingRatePerNight: h.buyingRatePerNight,
+              sellingRatePerNight: h.sellingRatePerNight,
             }))
           );
         }
@@ -120,6 +116,7 @@ export default function EditPackageBookingPage() {
           setTransportSegments(
             data.transportSegments.map((s: any) => ({
               id: s.id,
+              vendorId: s.vendorId || "",
               vehicle: s.vehicle,
               sector: s.sector,
               pickupDate: s.pickupDate ? s.pickupDate.slice(0, 10) : "",
@@ -135,6 +132,7 @@ export default function EditPackageBookingPage() {
           setFlightSegments(
             data.flightSegments.map((s: any) => ({
               id: s.id,
+              vendorId: s.vendorId || "",
               airline: s.airline,
               flightNo: s.flightNo,
               pnr: s.pnr || "",
@@ -161,6 +159,7 @@ export default function EditPackageBookingPage() {
           setVisaEntries(
             data.visaEntries.map((e: any) => ({
               id: e.id,
+              vendorId: e.vendorId || "",
               visaCategory: e.visaCategory,
               applicantName: e.applicantName,
               passportNumber: e.passportNumber,
@@ -219,8 +218,8 @@ export default function EditPackageBookingPage() {
         body: JSON.stringify({
           ...header,
           ...footer,
-          vendorName,
           exchangeRate: rate,
+          showBreakdown,
           includeHotels,
           includeTransports,
           includeFlights,
@@ -244,7 +243,7 @@ export default function EditPackageBookingPage() {
     }
   }
 
-  if (loading) return <p className="p-6 text-gray-400">Loading...</p>;
+  if (loading) return <Spinner label="Loading booking..." />;
 
   return (
     <div className="max-w-full mx-auto p-4 md:p-6">
@@ -258,33 +257,21 @@ export default function EditPackageBookingPage() {
 
         <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
           <h2 className="text-xs font-bold uppercase tracking-widest mb-4" style={{ color: "var(--agency-color)" }}>
-            Vendor &amp; Exchange Rate
+            Exchange Rate
           </h2>
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div>
-              <label className={labelClass}>Vendor Name</label>
-              <input
-                type="text"
-                className={inputClass}
-                placeholder="Main supplier for this package"
-                value={vendorName}
-                onChange={(e) => setVendorName(e.target.value)}
-              />
-            </div>
-            <div>
-              <label className={labelClass}>Exchange Rate (1 SAR = ? PKR)</label>
-              <input
-                type="number"
-                step="0.01"
-                className={inputClass}
-                value={exchangeRate}
-                onChange={(e) => setExchangeRate(e.target.value)}
-                required={includeHotels}
-              />
-              <p className="text-[11px] text-gray-400 mt-1">
-                Converts hotel prices (entered in SAR) into the package's PKR total.
-              </p>
-            </div>
+          <div>
+            <label className={labelClass}>Exchange Rate (1 SAR = ? PKR)</label>
+            <input
+              type="number"
+              step="0.01"
+              className={inputClass}
+              value={exchangeRate}
+              onChange={(e) => setExchangeRate(e.target.value)}
+              required={includeHotels}
+            />
+            <p className="text-[11px] text-gray-400 mt-1">
+              Converts hotel prices (entered in SAR) into the package's PKR total. Vendors are picked per hotel/transfer/flight/applicant below.
+            </p>
           </div>
         </section>
 
@@ -376,6 +363,27 @@ export default function EditPackageBookingPage() {
           ))}
         </SectionCard>
 
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-5">
+          <div className="flex items-center justify-between">
+            <div>
+              <h2 className="text-xs font-bold uppercase tracking-widest" style={{ color: "var(--agency-color)" }}>
+                Show Breakdown on Invoice
+              </h2>
+              <p className="text-[11px] text-gray-400 mt-1">
+                When off, the client's Invoice shows only the overall total. Turn on to also show each line's Sell Total.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setShowBreakdown((v) => !v)}
+              className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors ${showBreakdown ? "" : "bg-gray-200"}`}
+              style={showBreakdown ? { backgroundColor: "var(--agency-color)" } : undefined}
+            >
+              <span className={`inline-block h-4 w-4 transform rounded-full bg-white transition-transform ${showBreakdown ? "translate-x-6" : "translate-x-1"}`} />
+            </button>
+          </div>
+        </section>
+
         <PricingFooterFields
           value={footer}
           onChange={(field, value) => setFooter((f) => ({ ...f, [field]: value }))}
@@ -397,8 +405,6 @@ export default function EditPackageBookingPage() {
         </button>
       </form>
 
-      {/* Outside the <form> — PaymentHistorySection has its own form inside
-          it, and nested forms are invalid HTML. */}
       <div className="mt-5">
         <PaymentHistorySection
           bookingType="package"

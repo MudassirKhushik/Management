@@ -1,13 +1,13 @@
 // src/lib/pdf/VisaBookingDocument.tsx
 //
-// Mirrors HotelBookingDocument exactly — same header rules, same divider,
-// same info cards, same summary/notes split, same payment history table,
-// same footer. Only the entry table differs (applicants instead of hotels).
-//
 // Voucher = client-facing. Zero pricing, zero bank details. Shows
-//   Makkah/Madinah/Hotline + a verification QR.
-// Invoice = internal. Selling price only per applicant — never buying cost
-//   or profit. Bank details, Payment History, Total Paid / Remaining.
+//   Makkah/Madinah/Hotline + a verification QR (agency's own domain).
+// Invoice = internal. Sell Total per applicant only shows when the agency
+//   owner's "Show Breakdown" toggle is on — off by default, matching Hotel.
+//
+// Sizing: enlarged across the board per the agency's reference sample —
+// bigger logo, bigger title, bigger badges, bigger table text, more
+// generous padding everywhere. Same visual language as before, just scaled up.
 
 import { Document, Page, View, Text, Image, StyleSheet } from "@react-pdf/renderer";
 import {
@@ -27,6 +27,7 @@ type EntryRow = {
   expiryDate: string | Date | null;
   buyingCost: number;
   sellingPrice: number;
+  vendor?: { name: string } | null;
 };
 
 type PaymentEntry = {
@@ -43,13 +44,13 @@ type BookingData = {
   nationality: string;
   mobileNo: string;
   referenceNo: string | null;
+  voucherNumber: string | null;
   currency: string;
   discount: number;
   vatPercent: number;
   paymentType: string | null;
   paymentStatus: string | null;
   note: string | null;
-  vendorName: string | null;
   createdAt: string | Date;
   entries: EntryRow[];
   payments: PaymentEntry[];
@@ -96,77 +97,79 @@ export function VisaBookingDocument({
   agency,
   variant,
   verifyQrDataUri,
+  showBreakdown,
 }: {
   booking: BookingData;
   agency: AgencyData;
   variant: "invoice" | "voucher";
   verifyQrDataUri?: string | null;
+  showBreakdown?: boolean;
 }) {
   const isInvoice = variant === "invoice";
   const accent = agency.primaryColor || "#D2232A";
 
   const styles = StyleSheet.create({
-    page: { padding: 30, fontSize: 9, fontFamily: "Helvetica", color: "#121212" },
+    page: { padding: 38, fontSize: 10.5, fontFamily: "Helvetica", color: "#121212" },
 
-    headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 4 },
+    headerRow: { flexDirection: "row", justifyContent: "space-between", alignItems: "flex-start", marginBottom: 6 },
     logoRow: { flexDirection: "column" },
-    logoBig: { width: 155, height: 88, objectFit: "contain" },
-    agencyNameFallback: { fontSize: 19, fontFamily: "Helvetica-Bold" },
-    branchesText: { fontSize: 6.5, color: "#9A9A9A", marginTop: 4, maxWidth: 220 },
+    logoBig: { width: 200, height: 112, objectFit: "contain" },
+    agencyNameFallback: { fontSize: 25, fontFamily: "Helvetica-Bold" },
+    branchesText: { fontSize: 8, color: "#9A9A9A", marginTop: 6, maxWidth: 260 },
     docTitleBlock: { alignItems: "flex-end" },
-    docTitle: { fontSize: 22, fontFamily: "Helvetica-Bold", letterSpacing: 1.5, color: accent },
-    badgeRow: { flexDirection: "row", gap: 6, marginTop: 8 },
-    badge: { backgroundColor: accent, color: "white", paddingVertical: 5, paddingHorizontal: 9, borderRadius: 3, fontSize: 8 },
-    licenseText: { fontSize: 6.5, color: "#9A9A9A", marginTop: 4 },
+    docTitle: { fontSize: 30, fontFamily: "Helvetica-Bold", letterSpacing: 2, color: accent },
+    badgeRow: { flexDirection: "row", gap: 8, marginTop: 10 },
+    badge: { backgroundColor: accent, color: "white", paddingVertical: 7, paddingHorizontal: 13, borderRadius: 4, fontSize: 9.5 },
+    licenseText: { fontSize: 8, color: "#9A9A9A", marginTop: 6 },
 
-    dotDivider: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginVertical: 14, gap: 6 },
+    dotDivider: { flexDirection: "row", alignItems: "center", justifyContent: "center", marginVertical: 18, gap: 8 },
     dotLine: { flex: 1, height: 1, backgroundColor: "#E0E0E0" },
-    dotMark: { fontSize: 9, color: accent },
+    dotMark: { fontSize: 11, color: accent },
 
-    sectionRow: { flexDirection: "row", gap: 12, marginBottom: 16 },
-    infoCard: { flex: 1, border: "1pt solid #E5E1D8", borderRadius: 6, overflow: "hidden" },
-    infoCardTitleBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10 },
-    infoCardTitle: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.5 },
-    infoCardBody: { padding: 10 },
-    infoLine: { flexDirection: "row", justifyContent: "space-between", marginBottom: 4 },
-    infoLabel: { color: "#6B6B6B" },
-    infoValue: { fontFamily: "Helvetica-Bold" },
+    sectionRow: { flexDirection: "row", gap: 16, marginBottom: 20 },
+    infoCard: { flex: 1, border: "1pt solid #E5E1D8", borderRadius: 8, overflow: "hidden" },
+    infoCardTitleBar: { backgroundColor: accent, paddingVertical: 8, paddingHorizontal: 13 },
+    infoCardTitle: { fontSize: 10.5, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.6 },
+    infoCardBody: { padding: 13 },
+    infoLine: { flexDirection: "row", justifyContent: "space-between", marginBottom: 6 },
+    infoLabel: { color: "#6B6B6B", fontSize: 10 },
+    infoValue: { fontFamily: "Helvetica-Bold", fontSize: 10.5 },
 
-    entryTitleBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, marginBottom: 0, marginTop: 6 },
-    entryTitle: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.8 },
-    table: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 4, borderBottomRightRadius: 4, marginBottom: 16 },
+    entryTitleBar: { backgroundColor: accent, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 5, marginBottom: 0, marginTop: 8 },
+    entryTitle: { fontSize: 10.5, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 1 },
+    table: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 5, borderBottomRightRadius: 5, marginBottom: 20 },
     tableHeaderRow: { flexDirection: "row", backgroundColor: "#F3F1EC" },
     tableRow: { flexDirection: "row", borderTop: "1pt solid #EFEDE7" },
-    th: { padding: 6, color: "#5A5A5A", fontFamily: "Helvetica-Bold", fontSize: 7, textTransform: "uppercase" },
-    td: { padding: 6, fontSize: 8 },
+    th: { padding: 8, color: "#5A5A5A", fontFamily: "Helvetica-Bold", fontSize: 8.5, textTransform: "uppercase" },
+    td: { padding: 8, fontSize: 10 },
 
-    priceRow: { flexDirection: "row", gap: 12, alignItems: "flex-start", marginBottom: 16 },
-    notesBox: { flex: 1, border: "1pt solid #E5E1D8", borderRadius: 6, padding: 12 },
-    notesTitle: { fontSize: 8, fontFamily: "Helvetica-Bold", color: accent, textTransform: "uppercase", marginBottom: 5, letterSpacing: 0.5 },
-    notesText: { fontSize: 8, color: "#6B6B6B", marginBottom: 3, lineHeight: 1.4 },
+    priceRow: { flexDirection: "row", gap: 16, alignItems: "flex-start", marginBottom: 20 },
+    notesBox: { flex: 1, border: "1pt solid #E5E1D8", borderRadius: 8, padding: 16 },
+    notesTitle: { fontSize: 10, fontFamily: "Helvetica-Bold", color: accent, textTransform: "uppercase", marginBottom: 7, letterSpacing: 0.6 },
+    notesText: { fontSize: 10, color: "#6B6B6B", marginBottom: 4, lineHeight: 1.45 },
 
-    summaryBox: { width: 230, border: "1pt solid #E5E1D8", borderRadius: 6, padding: 12 },
-    summaryLine: { flexDirection: "row", justifyContent: "space-between", marginBottom: 5 },
-    summaryTotalLine: { flexDirection: "row", justifyContent: "space-between", marginTop: 8, paddingTop: 8, borderTop: "1pt solid #E5E1D8" },
-    summaryTotalLabel: { fontFamily: "Helvetica-Bold", fontSize: 11 },
-    summaryTotalValue: { fontFamily: "Helvetica-Bold", fontSize: 11, color: accent },
+    summaryBox: { width: 270, border: "1pt solid #E5E1D8", borderRadius: 8, padding: 16 },
+    summaryLine: { flexDirection: "row", justifyContent: "space-between", marginBottom: 7 },
+    summaryTotalLine: { flexDirection: "row", justifyContent: "space-between", marginTop: 10, paddingTop: 10, borderTop: "1pt solid #E5E1D8" },
+    summaryTotalLabel: { fontFamily: "Helvetica-Bold", fontSize: 13 },
+    summaryTotalValue: { fontFamily: "Helvetica-Bold", fontSize: 13, color: accent },
 
-    paymentHistoryBar: { backgroundColor: accent, paddingVertical: 6, paddingHorizontal: 10, borderRadius: 4, marginTop: 6 },
-    paymentHistoryTitle: { fontSize: 9, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 0.8 },
-    paymentTable: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 4, borderBottomRightRadius: 4, marginBottom: 16 },
+    paymentHistoryBar: { backgroundColor: accent, paddingVertical: 8, paddingHorizontal: 13, borderRadius: 5, marginTop: 8 },
+    paymentHistoryTitle: { fontSize: 10.5, fontFamily: "Helvetica-Bold", color: "white", textTransform: "uppercase", letterSpacing: 1 },
+    paymentTable: { border: "1pt solid #E5E1D8", borderTop: "none", borderBottomLeftRadius: 5, borderBottomRightRadius: 5, marginBottom: 20 },
 
-    footer: { marginTop: 8, paddingTop: 12, borderTop: "1pt solid #E5E1D8" },
-    footerRow: { flexDirection: "row", gap: 24, alignItems: "flex-start" },
+    footer: { marginTop: 10, paddingTop: 16, borderTop: "1pt solid #E5E1D8" },
+    footerRow: { flexDirection: "row", gap: 28, alignItems: "flex-start" },
     footerCol: { flex: 1 },
-    footerTitle: { fontSize: 8, fontFamily: "Helvetica-Bold", color: accent, textTransform: "uppercase", marginBottom: 5, letterSpacing: 0.5 },
-    footerText: { fontSize: 7.5, color: "#6B6B6B", marginBottom: 2 },
-    policyText: { fontSize: 7, color: "#9A9A9A", marginTop: 2 },
-    signOff: { marginTop: 14, alignItems: "flex-end" },
-    signOffText: { fontSize: 8, color: "#6B6B6B" },
+    footerTitle: { fontSize: 9.5, fontFamily: "Helvetica-Bold", color: accent, textTransform: "uppercase", marginBottom: 7, letterSpacing: 0.6 },
+    footerText: { fontSize: 9, color: "#6B6B6B", marginBottom: 3 },
+    policyText: { fontSize: 8.5, color: "#9A9A9A", marginTop: 3 },
+    signOff: { marginTop: 16, alignItems: "flex-end" },
+    signOffText: { fontSize: 9.5, color: "#6B6B6B" },
 
     qrBlock: { alignItems: "center" },
-    qrImage: { width: 70, height: 70 },
-    qrCaption: { fontSize: 6.5, color: "#9A9A9A", marginTop: 3, textAlign: "center" },
+    qrImage: { width: 88, height: 88 },
+    qrCaption: { fontSize: 8, color: "#9A9A9A", marginTop: 4, textAlign: "center" },
   });
 
   const { grossBuying, grossSelling } = sumLineItems(
@@ -186,8 +189,6 @@ export function VisaBookingDocument({
     <Document>
       <Page size="A4" style={styles.page}>
         <View style={styles.headerRow}>
-          {/* Big logo only when one exists — never logo + name together.
-              Falls back to the name alone. Branches sit underneath either way. */}
           <View style={styles.logoRow}>
             {agency.logoUrl ? (
               <Image src={agency.logoUrl} style={styles.logoBig} />
@@ -201,7 +202,7 @@ export function VisaBookingDocument({
           <View style={styles.docTitleBlock}>
             <Text style={styles.docTitle}>{isInvoice ? "INVOICE" : "VOUCHER"}</Text>
             <View style={styles.badgeRow}>
-              <Text style={styles.badge}>REF {booking.referenceNo || booking.id.slice(0, 8).toUpperCase()}</Text>
+              <Text style={styles.badge}>{booking.voucherNumber || "—"}</Text>
               <Text style={styles.badge}>{fmtDate(booking.createdAt)}</Text>
             </View>
             {agency.licenseNo && <Text style={styles.licenseText}>License No: {agency.licenseNo}</Text>}
@@ -227,9 +228,6 @@ export function VisaBookingDocument({
               {isInvoice && (
                 <View style={styles.infoLine}><Text style={styles.infoLabel}>Payment Type</Text><Text style={styles.infoValue}>{booking.paymentType || "—"}</Text></View>
               )}
-              {isInvoice && booking.vendorName && (
-                <View style={styles.infoLine}><Text style={styles.infoLabel}>Vendor</Text><Text style={styles.infoValue}>{booking.vendorName}</Text></View>
-              )}
             </View>
           </View>
           <View style={styles.infoCard}>
@@ -244,8 +242,6 @@ export function VisaBookingDocument({
           </View>
         </View>
 
-        {/* One block per applicant, in entry order — same structure Hotel
-            uses for "Hotel 1", "Hotel 2". */}
         {booking.entries.map((e, i) => (
           <View key={i} wrap={false}>
             <View style={styles.entryTitleBar}>
@@ -259,12 +255,7 @@ export function VisaBookingDocument({
                 <Text style={[styles.th, { flex: 1 }]}>Processing</Text>
                 <Text style={[styles.th, { flex: 1.3 }]}>Submission</Text>
                 <Text style={[styles.th, { flex: 1.3 }]}>Expiry</Text>
-                {isInvoice && (
-                  <>
-                    <Text style={[styles.th, { flex: 1 }]}>Rate</Text>
-                    <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text>
-                  </>
-                )}
+                {isInvoice && showBreakdown && <Text style={[styles.th, { flex: 1 }]}>Sell Total</Text>}
               </View>
               <View style={styles.tableRow}>
                 <Text style={[styles.td, { flex: 1.7 }]}>{e.applicantName}</Text>
@@ -273,13 +264,8 @@ export function VisaBookingDocument({
                 <Text style={[styles.td, { flex: 1 }]}>{e.processingType || "—"}</Text>
                 <Text style={[styles.td, { flex: 1.3 }]}>{fmtDateOrDash(e.submissionDate)}</Text>
                 <Text style={[styles.td, { flex: 1.3 }]}>{fmtDateOrDash(e.expiryDate)}</Text>
-                {isInvoice && (
-                  <>
-                    {/* Selling only — buying cost and profit never appear on
-                        either document, same rule as Hotel. */}
-                    <Text style={[styles.td, { flex: 1 }]}>{money(e.sellingPrice, booking.currency)}</Text>
-                    <Text style={[styles.td, { flex: 1 }]}>{money(e.sellingPrice, booking.currency)}</Text>
-                  </>
+                {isInvoice && showBreakdown && (
+                  <Text style={[styles.td, { flex: 1 }]}>{money(e.sellingPrice, booking.currency)}</Text>
                 )}
               </View>
             </View>
@@ -291,8 +277,6 @@ export function VisaBookingDocument({
             <View style={styles.notesBox}>
               <Text style={styles.notesTitle}>Notes</Text>
               <Text style={styles.notesText}>{booking.note || "—"}</Text>
-              {/* No exchange-rate block here — visa is priced in the
-                  booking's own currency, so there's nothing to convert. */}
             </View>
 
             <View style={styles.summaryBox}>
@@ -347,7 +331,7 @@ export function VisaBookingDocument({
                 <Text style={styles.footerTitle}>Bank Details</Text>
                 {agency.bankAccounts.length === 0 && <Text style={styles.footerText}>—</Text>}
                 {agency.bankAccounts.map((acc, i) => (
-                  <View key={i} style={{ marginBottom: i < agency.bankAccounts.length - 1 ? 6 : 0 }}>
+                  <View key={i} style={{ marginBottom: i < agency.bankAccounts.length - 1 ? 8 : 0 }}>
                     {agency.bankAccounts.length > 1 && (
                       <Text style={[styles.footerText, { fontFamily: "Helvetica-Bold" }]}>Account {i + 1}</Text>
                     )}
@@ -370,7 +354,7 @@ export function VisaBookingDocument({
               {verifyQrDataUri && (
                 <View style={styles.qrBlock}>
                   <Image src={verifyQrDataUri} style={styles.qrImage} />
-                  <Text style={styles.qrCaption}>Scan to Verify{"\n"}Hajj & Umrah Services</Text>
+                  <Text style={styles.qrCaption}>Scan to Verify</Text>
                 </View>
               )}
             </View>
@@ -385,7 +369,7 @@ export function VisaBookingDocument({
           </View>
 
           {agency.address && (
-            <Text style={[styles.policyText, { textAlign: "center", marginTop: 10 }]}>{agency.address}</Text>
+            <Text style={[styles.policyText, { textAlign: "center", marginTop: 12 }]}>{agency.address}</Text>
           )}
         </View>
       </Page>

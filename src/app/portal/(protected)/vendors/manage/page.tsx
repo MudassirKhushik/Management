@@ -90,7 +90,7 @@ export default function ManageVendorsPage() {
       <input type="text" placeholder="Search your vendor..." value={search} onChange={(e) => setSearch(e.target.value)}
         className="w-full max-w-md mb-2 rounded-lg border border-gray-200 px-3.5 py-2.5 text-sm focus:outline-none" />
       <p className="text-[11px] text-gray-400 mb-5">
-        All amounts below are shown in PKR. Hotel purchases (entered in SAR) are converted using each booking's own exchange rate.
+        All amounts are in PKR. Hotel purchases (entered in SAR) are converted using each booking's own exchange rate.
       </p>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
