@@ -75,94 +75,97 @@ export default async function PortalLayout({ children }: { children: React.React
       <SidebarBrand logoUrl={agency.logoUrl} name={agency.name} />
 
       <nav className="flex-1 overflow-y-auto overflow-x-hidden flex flex-col gap-1 py-5 px-3">
-        <RailNavLink href="/portal" icon={<IconDashboard />}>Dashboard</RailNavLink>
+  <RailNavLink href="/portal" icon={<IconDashboard />}>
+    Dashboard
+  </RailNavLink>
 
-        <SidebarSectionLabel>Master Operations</SidebarSectionLabel>
-        <RailNavLink href="/portal/travelers/add" icon={<IconPackage />} hideInRail>
-          Full Package Booking
-        </RailNavLink>
-        <RailNavLink href="/portal/travelers/manage" icon={<IconPackage />} indent>
-          Manage Packages
-        </RailNavLink>
+  <SidebarSectionLabel>Master Operations</SidebarSectionLabel>
+  <RailNavLink href="/portal/travelers/add" icon={<IconPackage />} hideInRail>
+    Full Package Booking
+  </RailNavLink>
+  <RailNavLink href="/portal/travelers/manage" icon={<IconPackage />} indent>
+    Manage Packages
+  </RailNavLink>
 
-        {/* Vendors Management Section */}
-        <SidebarSectionLabel>Vendors</SidebarSectionLabel>
-        <RailNavLink href="/portal/vendors/add" icon={<IconVendor />} indent hideInRail>
-          Add Vendor
-        </RailNavLink>
-        <RailNavLink href="/portal/vendors/manage" icon={<IconVendor />} indent>
-          Manage Vendors
-        </RailNavLink>
+  {/* Vendors Management Section */}
+  <SidebarSectionLabel>Vendors</SidebarSectionLabel>
+  <RailNavLink href="/portal/vendors/add" icon={<IconVendor />} indent hideInRail>
+    Add Vendor
+  </RailNavLink>
+  <RailNavLink href="/portal/vendors/manage" icon={<IconVendor />} indent>
+    Manage Vendors
+  </RailNavLink>
 
-        <SidebarSectionLabel>Hotel</SidebarSectionLabel>
-        <RailNavLink href="/portal/hotel-bookings/add" icon={<IconHotel />} indent hideInRail>
-          Hotel Booking
-        </RailNavLink>
-        <RailNavLink href="/portal/hotel-bookings/manage" icon={<IconHotel />} indent>
-          Manage Hotels
-        </RailNavLink>
+  <SidebarSectionLabel>Hotel</SidebarSectionLabel>
+  <RailNavLink href="/portal/hotel-bookings/add" icon={<IconHotel />} indent hideInRail>
+    Hotel Booking
+  </RailNavLink>
+  <RailNavLink href="/portal/hotel-bookings/manage" icon={<IconHotel />} indent>
+    Manage Hotels
+  </RailNavLink>
 
-        <SidebarSectionLabel>Transport</SidebarSectionLabel>
-        <RailNavLink href="/portal/transport-bookings/add" icon={<IconTransport />} indent hideInRail>
-          Transport Booking
-        </RailNavLink>
-        <RailNavLink href="/portal/transport-bookings/manage" icon={<IconTransport />} indent>
-          Manage Transport
-        </RailNavLink>
+  <SidebarSectionLabel>Transport</SidebarSectionLabel>
+  <RailNavLink href="/portal/transport-bookings/add" icon={<IconTransport />} indent hideInRail>
+    Transport Booking
+  </RailNavLink>
+  <RailNavLink href="/portal/transport-bookings/manage" icon={<IconTransport />} indent>
+    Manage Transport
+  </RailNavLink>
 
-        <SidebarSectionLabel>Flight</SidebarSectionLabel>
-        <RailNavLink href="/portal/flight-bookings/add" icon={<IconFlight />} indent hideInRail>
-          Flight Booking
-        </RailNavLink>
-        <RailNavLink href="/portal/flight-bookings/manage" icon={<IconFlight />} indent>
-          Manage Flights
-        </RailNavLink>
+  <SidebarSectionLabel>Flight</SidebarSectionLabel>
+  <RailNavLink href="/portal/flight-bookings/add" icon={<IconFlight />} indent hideInRail>
+    Flight Booking
+  </RailNavLink>
+  <RailNavLink href="/portal/flight-bookings/manage" icon={<IconFlight />} indent>
+    Manage Flights
+  </RailNavLink>
 
-        <SidebarSectionLabel>Visa</SidebarSectionLabel>
-        <RailNavLink href="/portal/visa-bookings/add" icon={<IconVisa />} indent hideInRail>
-          Visa Booking
-        </RailNavLink>
-        <RailNavLink href="/portal/visa-bookings/manage" icon={<IconVisa />} indent>
-          Manage Visas
-        </RailNavLink>
+  <SidebarSectionLabel>Visa</SidebarSectionLabel>
+  <RailNavLink href="/portal/visa-bookings/add" icon={<IconVisa />} indent hideInRail>
+    Visa Booking
+  </RailNavLink>
+  <RailNavLink href="/portal/visa-bookings/manage" icon={<IconVisa />} indent>
+    Manage Visas
+  </RailNavLink>
 
-        {/* Dynamic Static Reports Module (With Soon Badges) */}
-        <SidebarSectionLabel>Reports</SidebarSectionLabel>
-        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
-          <span className="flex-1 text-left">Daily Report</span>
-          <SoonBadge />
-        </RailNavLink>
-        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
-          <span className="flex-1 text-left">Monthly Report</span>
-          <SoonBadge />
-        </RailNavLink>
-        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
-          <span className="flex-1 text-left">Sales Report</span>
-          <SoonBadge />
-        </RailNavLink>
-        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
-          <span className="flex-1 text-left">Profit &amp; Loss</span>
-          <SoonBadge />
-        </RailNavLink>
-        <RailNavLink href="#" icon={<IconReport />} indent variant="ghost" className="group flex items-center w-full">
-          <span className="flex-1 text-left">Outstanding Payments</span>
-          <SoonBadge />
-        </RailNavLink>
+  {/* Dynamic Static Reports Module (With Soon Badges) */}
+  <SidebarSectionLabel>Reports</SidebarSectionLabel>
+  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
+    <span className="flex-1 text-left">Daily Report</span>
+    <SoonBadge />
+  </RailNavLink>
+  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
+    <span className="flex-1 text-left">Monthly Report</span>
+    <SoonBadge />
+  </RailNavLink>
+  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
+    <span className="flex-1 text-left">Sales Report</span>
+    <SoonBadge />
+  </RailNavLink>
+  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
+    <span className="flex-1 text-left">Profit &amp; Loss</span>
+    <SoonBadge />
+  </RailNavLink>
+  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
+    <span className="flex-1 text-left">Outstanding Payments</span>
+    <SoonBadge />
+  </RailNavLink>
 
-        <SidebarSectionLabel>Marketing &amp; Settings</SidebarSectionLabel>
-        <RailNavLink href="/portal/settings" icon={<IconSettings />} indent>
-          Agency Settings
-        </RailNavLink>
-        <RailNavLink href="/portal/packages/add" icon={<IconMarketing />} indent hideInRail>
-          Add Website Package
-        </RailNavLink>
-        <RailNavLink href="/portal/packages/manage" icon={<IconMarketing />} indent>
-          Manage Website Packages
-        </RailNavLink>
-        <RailNavLink href="/portal/notifications" icon={<IconBell />} indent>
-          Notifications
-        </RailNavLink>
-      </nav>
+  <SidebarSectionLabel>Marketing &amp; Settings</SidebarSectionLabel>
+  <RailNavLink href="/portal/settings" icon={<IconSettings />} indent>
+    Agency Settings
+  </RailNavLink>
+  <RailNavLink href="/portal/packages/add" icon={<IconMarketing />} indent hideInRail>
+    Add Website Package
+  </RailNavLink>
+  <RailNavLink href="/portal/packages/manage" icon={<IconMarketing />} indent>
+    Manage Website Packages
+  </RailNavLink>
+  <RailNavLink href="/portal/notifications" icon={<IconBell />} indent>
+    Notifications
+  </RailNavLink>
+</nav>
+
 
       {session && (
         <form
