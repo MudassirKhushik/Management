@@ -130,25 +130,35 @@ export default async function PortalLayout({ children }: { children: React.React
 
   {/* Dynamic Static Reports Module (With Soon Badges) */}
   <SidebarSectionLabel>Reports</SidebarSectionLabel>
-  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
-    <span className="flex-1 text-left">Daily Report</span>
-    <SoonBadge />
+  <RailNavLink href="#" icon={<IconReport />} indent>
+    <span className="flex items-center justify-between w-full">
+      <span>Daily Report</span>
+      <SoonBadge />
+    </span>
   </RailNavLink>
-  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
-    <span className="flex-1 text-left">Monthly Report</span>
-    <SoonBadge />
+  <RailNavLink href="#" icon={<IconReport />} indent>
+    <span className="flex items-center justify-between w-full">
+      <span>Monthly Report</span>
+      <SoonBadge />
+    </span>
   </RailNavLink>
-  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
-    <span className="flex-1 text-left">Sales Report</span>
-    <SoonBadge />
+  <RailNavLink href="#" icon={<IconReport />} indent>
+    <span className="flex items-center justify-between w-full">
+      <span>Sales Report</span>
+      <SoonBadge />
+    </span>
   </RailNavLink>
-  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
-    <span className="flex-1 text-left">Profit &amp; Loss</span>
-    <SoonBadge />
+  <RailNavLink href="#" icon={<IconReport />} indent>
+    <span className="flex items-center justify-between w-full">
+      <span>Profit &amp; Loss</span>
+      <SoonBadge />
+    </span>
   </RailNavLink>
-  <RailNavLink href="#" icon={<IconReport />} indent className="group flex items-center w-full opacity-80 cursor-not-allowed">
-    <span className="flex-1 text-left">Outstanding Payments</span>
-    <SoonBadge />
+  <RailNavLink href="#" icon={<IconReport />} indent>
+    <span className="flex items-center justify-between w-full">
+      <span>Outstanding Payments</span>
+      <SoonBadge />
+    </span>
   </RailNavLink>
 
   <SidebarSectionLabel>Marketing &amp; Settings</SidebarSectionLabel>
@@ -165,6 +175,7 @@ export default async function PortalLayout({ children }: { children: React.React
     Notifications
   </RailNavLink>
 </nav>
+
 
 
       {session && (
